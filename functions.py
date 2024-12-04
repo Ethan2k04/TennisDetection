@@ -1,0 +1,274 @@
+import cv2
+
+from libs import *
+from constants import *
+from tools import refine_mask, get_trackbar_values_filter, get_trackbar_values_confidence, \
+    get_trackbar_values_morphology
+
+# yolo11 模型初始化
+device = '0' if torch.cuda.is_available() else 'cpu'
+model_tennis = YOLO("model/best-tennis-s.pt")
+model_digit = YOLO("model/best-digit-n.pt")
+
+
+# 使用yolo11检测网球
+def detect_balls(frame):
+    """
+    使用 YOLO 检测网球，并根据检测结果绘制目标框。
+    """
+    # 获取检测结果
+    ball_conf, _ = get_trackbar_values_confidence()
+    results = model_tennis.predict(frame, verbose=False, save=False, imgsz=MODEL_IMGSIZE, conf=ball_conf)
+
+    # 用于存储所有网球框的位置信息
+    ball_positions = []
+
+    # 遍历检测结果并提取位置信息
+    for result in results:
+        boxes = result.boxes
+        for box in boxes:
+            # 获取框的左上角和右下角坐标
+            x1, y1, x2, y2 = box.xyxy[0].tolist()  # 将结果转换为列表
+            ball_positions.append((int(x1), int(y1), int(x2), int(y2)))  # 存储为整数元组
+
+    return ball_positions
+
+
+# 根据检测结果绘制网球目标框
+def draw_ball_boxes(frame, ball_positions):
+    """
+    根据存储的网球框位置信息，在帧上绘制框。
+    """
+    for (x1, y1, x2, y2) in ball_positions:
+        # 绘制矩形框，绿色，线宽3
+        cv2.rectangle(frame, (x1, y1), (x2, y2), BALL_COLOR, LINE_THICKNESS)
+
+        # 添加标签文字
+        label = "Ball"
+        text_position = (x2 + TEXT_MARGIN, y1)  # 文字位置设置在圆的右侧
+        cv2.putText(frame, label, text_position, cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, BALL_COLOR, LINE_THICKNESS)
+
+    return frame
+
+
+# 筛选出标靶颜色
+def filter_target_color(frame):
+    """
+    通过动态更新的 HSV 范围筛选黑色和白色。
+    """
+    # 获取当前滑块的值，更新 V 范围
+    upper_black, lower_white, = get_trackbar_values_filter()
+
+    # 转换为 HSV 色彩范围
+    hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # 筛选黑色和白色像素
+    mask_black = cv2.inRange(hsv_frame, LOWER_BLACK, upper_black)
+    mask_white = cv2.inRange(hsv_frame, lower_white, UPPER_WHITE)
+
+    # 合并黑色和白色的掩码
+    mask = cv2.bitwise_or(mask_black, mask_white)
+    return mask
+
+
+# 对检测到的标靶进行聚类分析
+def cluster_target(data, n_clusters):
+    """
+    对检出的标靶大小进行聚类，根据聚类结果判定标靶类型
+    """
+    # 转为 NumPy 数组
+    data = np.array(data).reshape(-1, 1)
+
+    # 使用 K-Means 聚类
+    clusters = {}
+    if len(data) >= n_clusters:
+        kmeans = KMeans(n_clusters=n_clusters, random_state=RANDOM_STATE).fit(data)
+        labels = kmeans.labels_
+        centers = kmeans.cluster_centers_
+
+        # 将数据和聚类结果对应
+        clusters = {i: [] for i in range(n_clusters)}
+        for value, label in zip(data.flatten(), labels):
+            clusters[label].append(value)
+
+        # 按中心值对簇排序
+        sorted_clusters = sorted(clusters.items(), key=lambda x: centers[x[0]])
+
+        # 重新分配 keys，并对每个簇的 values 排序
+        clusters = {i: sorted(values) for i, (_, values) in enumerate(sorted_clusters)}
+
+    # 返回结果
+    return clusters
+
+
+# 判断轮廓是不是椭圆形
+def is_ellipse(contour):
+    """
+    根据轮廓点判断轮廓是否为类椭圆形
+    """
+    # 如果轮廓点数小于 MIN_POLY，则不可能是椭圆
+    if len(contour) < MIN_POLY:
+        return False
+
+    # 拟合椭圆并计算相关属性
+    ellipse = cv2.fitEllipse(contour)
+    peri = cv2.arcLength(contour, True)  # 计算轮廓的周长
+    (x, y), (major_axis, minor_axis), angle = ellipse
+    area = cv2.contourArea(contour)
+
+    # 如果面积为零，直接返回 False
+    if area == 0:
+        return False
+
+    # 使用 Ramanujan 的第二公式计算椭圆的周长
+    a = major_axis / 2  # 长轴半径
+    b = minor_axis / 2  # 短轴半径
+    ellipse_peri = np.pi * (3 * (a + b) - np.sqrt((3 * a + b) * (a + 3 * b)))
+
+    # 计算周长比率，接近1说明轮廓较规则
+    peri_ratio = peri / ellipse_peri
+
+    # 使用多边形逼近轮廓，排除常见的非椭圆形状（如三角形、四边形等）
+    approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+
+    # 筛选椭圆条件
+    is_valid_ellipse = abs(peri_ratio - 1) < PERI_BIAS and len(approx) > MIN_POLY
+
+    return is_valid_ellipse
+
+
+# 检测目标轮廓
+def find_target_contours(frame):
+    """
+    检测 frame 中的标靶轮廓，返回字典结果
+    """
+    # 获取 trackbar 设定的参数
+    refine_ksize, erode_ksize, erode_iter = get_trackbar_values_morphology()
+
+    # 过滤目标颜色并精细化掩膜
+    mask = filter_target_color(frame)
+    mask = refine_mask(mask, refine_ksize)
+
+    # 查找轮廓
+    contours, _ = cv2.findContours(mask, cv2.MORPH_ELLIPSE, cv2.CHAIN_APPROX_NONE)
+
+    # 创建一个空白掩膜，用于存放选中的轮廓区域
+    new_mask = np.zeros_like(mask)  # 初始掩膜全为0
+
+    # 遍历所有轮廓，并填充相应区域
+    for contour in contours:
+        # 在每个轮廓区域填充1
+        cv2.drawContours(new_mask, [contour], -1, 255, thickness=cv2.FILLED)  # 填充轮廓区域
+
+    # 使用腐蚀操作进行降噪
+    kernel = np.ones((erode_ksize, erode_ksize), np.uint8)
+    mask = cv2.erode(new_mask, kernel, iterations=erode_iter)
+
+    # =================================================== #
+    # cv2.imwrite("target_mask.png", mask)  # 调试用
+    # cv2.imshow("target_mask", mask)       # 调试用
+    # cv2.moveWindow("target_mask", CENTER_X, CENTER_Y)
+    # =================================================== #
+
+    contours, _ = cv2.findContours(mask, cv2.MORPH_ELLIPSE, cv2.CHAIN_APPROX_NONE)
+
+    # 识别符合条件的椭圆
+    ellipses = [contour for contour in contours if is_ellipse(contour)]
+
+    # 用于保存符合 YOLO 检测条件的轮廓
+    valid_ellipses = []
+
+    # 遍历椭圆轮廓并进行 YOLO 检测
+    for contour in ellipses:
+        # 获取轮廓的边界框
+        x, y, w, h = cv2.boundingRect(contour)
+        cropped_region = frame[y: y + h, x: x + w]  # 截取对应的区域
+
+        # 使用YOLO模型进行检测
+        _, target_conf = get_trackbar_values_confidence()
+        results = model_digit.predict(cropped_region, verbose=False, save=False, imgsz=MODEL_IMGSIZE, conf=target_conf)
+
+        # 判断检测是否有结果，如果有结果则保留该轮廓
+        if len(results[0].boxes.cls.data.tolist()) > 0:  # 判断是否有检测到目标
+            valid_ellipses.append(contour)  # 如果检测到目标，保留该轮廓
+
+    # 计算所有有效椭圆的面积并排序
+    area_list = sorted([cv2.contourArea(contour) for contour in valid_ellipses])
+
+    # 识别的标靶结果
+    result = {"undef": []}
+
+    # 从元信息中读取参数
+    num_cls = 0
+    num_target = 0
+    score_list = []
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, 'r') as file:
+            settings = json.load(file)
+
+        num_cls = settings["num_cls"]
+        score_list = settings["score_list"]
+        num_target = settings["num_target"]
+
+    # 聚类目标面积
+    cluster = cluster_target(area_list, num_cls)
+
+    # 识别的标靶结果
+    for score in score_list:
+        result[str(score)] = []
+
+    if is_target_result_valid(cluster, num_target):
+        for contour in valid_ellipses:
+            contour_area = cv2.contourArea(contour)
+            for i in range(len(score_list)):
+                if len(cluster[i]) > 0:
+                    if min(cluster[i]) <= contour_area <= max(cluster[i]):
+                        result[str(score_list[i])].append(contour)
+
+        return result
+    else:
+        result["undef"] = valid_ellipses
+        return result
+
+
+# 根据检测结果绘制标靶目标框
+def draw_target_boxes(frame, config):
+    """
+    根据检出的标靶轮廓绘制目标框
+    """
+    for key, value in config.items():
+        cls = value["cls"]
+        x = int(value["center_x"])
+        y = int(value["center_y"])
+        major_axis = int(value["major_axis"])
+        minor_axis = int(value["minor_axis"])
+        label = "Target_" + str(cls)
+        text_position = (x + int(minor_axis / 2) + 10, y - int(major_axis / 2))
+        cv2.rectangle(frame, (x - int(minor_axis / 2), y - int(major_axis / 2)),
+                      (x + int(minor_axis / 2), y + int(major_axis / 2)), TARGET_COLOR, LINE_THICKNESS)
+        cv2.putText(frame, label, text_position, cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, TARGET_COLOR,
+                    LINE_THICKNESS)
+
+    return frame
+
+
+# 根据检出的网球和标靶位置判断是否碰撞
+def detect_collision(ball_center, config):
+    for key, value in config.items():
+        target_center = (int(value["center_x"]), int(value["center_y"]))
+        target_width = int(value["minor_axis"])
+        target_height = int(value["major_axis"])
+        if (target_center[0] - target_width // 2 <= ball_center[0] <= target_center[
+            0] + target_width // 2) and \
+                (target_center[1] - target_height // 2 <= ball_center[1] <= target_center[
+                    1] + target_height // 2):
+            if value["cls"] != "undef":
+                return True, int(value["cls"])
+
+    return False, 0
+
+
+def is_target_result_valid(target_result, num_target):
+    total_length = sum(len(v) for k, v in target_result.items() if k != "undef")
+    return total_length == num_target and all(
+        len(v) > 0 for k, v in target_result.items() if k != "undef")

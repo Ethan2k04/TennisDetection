@@ -1,0 +1,71 @@
+from libs import *
+
+# CONFIG 文件名为 config.json
+CONFIG_FILE = "meta/config.json"
+
+# SETTINGS 文件名为 settings.json
+SETTINGS_FILE = "meta/settings.json"
+
+# 终端显示器大小和中心点（可选）
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
+CENTER_X = (SCREEN_WIDTH - SCREEN_HEIGHT) // 2
+CENTER_Y = (SCREEN_WIDTH - SCREEN_HEIGHT) // 2
+
+# 每隔多少秒重新检测标靶
+RETARGET_WAIT_SEC = 3
+
+# 等待多少秒判断碰撞
+BALL_HIT_WAIT_SEC = 1
+
+# 黑色的HSV范围
+LOWER_BLACK = np.array([0, 0, 0])
+UPPER_BLACK = np.array([180, 255, 70])
+
+# 白色的HSV范围
+LOWER_WHITE = np.array([0, 0, 130])
+UPPER_WHITE = np.array([180, 50, 255])
+
+# 标靶检测形态学操作参数
+REFINE_KSIZE = 15
+ERODE_KSIZE = 5
+ERODE_ITER = 5
+
+# 随机数种子
+RANDOM_STATE = 42
+
+# 框线和文字的粗细
+LINE_THICKNESS = 5
+FONT_SCALE = 0.8
+
+# 框线和文字颜色
+BALL_COLOR = (0, 255, 0)
+TARGET_COLOR = (0, 0, 255)
+
+# 标签文字显示偏移
+TEXT_MARGIN = 10
+
+# 分数文字的粗细
+SCORE_THICKNESS = 3
+SCORE_SCALE = 1
+
+# 分数文字的颜色
+SCORE_COLOR = (0, 255, 255)
+
+# 分数文字的位置
+SCORE_ORG = (30, 50)
+
+# 判断椭圆最少的多边形边数
+MIN_POLY = 5
+
+# 非椭圆容忍度
+PERI_BIAS = 0.3
+
+# 网球置信度
+BALL_CONF = 0.05
+
+# 标靶置信度
+TARGET_CONF = 0.2
+
+# 输入模型的图像大小
+MODEL_IMGSIZE = 320
