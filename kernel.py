@@ -1,14 +1,16 @@
-import cv2
-
 from libs import *
 from constants import *
+from yolo11 import *
+from py_utils.coco_utils import COCO_test_helper
 from tools import refine_mask, get_trackbar_values_filter, get_trackbar_values_confidence, \
     get_trackbar_values_morphology
 
+
 # yolo11 模型初始化
 device = '0' if torch.cuda.is_available() else 'cpu'
-model_tennis = YOLO("model/best-tennis-s.pt")
-model_digit = YOLO("model/best-digit-n.pt")
+model_tennis = setup_model(TENNIS_MODEL_PATH)
+model_digit = setup_model(TARGET_MODEL_PATH)
+co_helper = COCO_test_helper(enable_letter_box=True)
 
 
 # 使用yolo11检测网球
@@ -18,18 +20,19 @@ def detect_balls(frame):
     """
     # 获取检测结果
     ball_conf, _ = get_trackbar_values_confidence()
-    results = model_tennis.predict(frame, verbose=False, save=False, imgsz=MODEL_IMGSIZE, conf=ball_conf)
+    img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    outputs = model_tennis.run([img])
+    boxes, _, _ = post_process(outputs)
 
     # 用于存储所有网球框的位置信息
     ball_positions = []
 
     # 遍历检测结果并提取位置信息
-    for result in results:
-        boxes = result.boxes
+    if boxes is not None:
         for box in boxes:
-            # 获取框的左上角和右下角坐标
-            x1, y1, x2, y2 = box.xyxy[0].tolist()  # 将结果转换为列表
-            ball_positions.append((int(x1), int(y1), int(x2), int(y2)))  # 存储为整数元组
+            x1, y1, x2, y2 = box
+            ball_positions.append((int(x1), int(y1), int(x2), int(y2)))
 
     return ball_positions
 
@@ -186,10 +189,13 @@ def find_target_contours(frame):
 
         # 使用YOLO模型进行检测
         _, target_conf = get_trackbar_values_confidence()
-        results = model_digit.predict(cropped_region, verbose=False, save=False, imgsz=MODEL_IMGSIZE, conf=target_conf)
+        img = co_helper.letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        outputs = model_tennis.run([img])
+        _, _, scores = post_process(outputs)
 
         # 判断检测是否有结果，如果有结果则保留该轮廓
-        if len(results[0].boxes.cls.data.tolist()) > 0:  # 判断是否有检测到目标
+        if max(scores) > target_conf:  # 判断是否有检测到目标
             valid_ellipses.append(contour)  # 如果检测到目标，保留该轮廓
 
     # 计算所有有效椭圆的面积并排序
@@ -272,3 +278,8 @@ def is_target_result_valid(target_result, num_target):
     total_length = sum(len(v) for k, v in target_result.items() if k != "undef")
     return total_length == num_target and all(
         len(v) > 0 for k, v in target_result.items() if k != "undef")
+
+
+def destruct():
+    model_tennis.release()
+    model_digit.release()
