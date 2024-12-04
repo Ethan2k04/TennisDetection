@@ -1,5 +1,7 @@
-from libs import *
-from functions import *
+import sys
+import time
+
+from kernel import *
 from constants import *
 from tools import save_target_to_config, create_trackbar, get_trackbar_values_wait_sec
 

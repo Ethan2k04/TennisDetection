@@ -1,4 +1,4 @@
-from libs import *
+import numpy as np
 
 # CONFIG 文件名为 config.json
 CONFIG_FILE = "meta/config.json"
@@ -67,5 +67,23 @@ BALL_CONF = 0.05
 # 标靶置信度
 TARGET_CONF = 0.2
 
-# 输入模型的图像大小
+# 模型相关参数
+OBJ_THRESH = 0.25
+
+NMS_THRESH = 0.45
+
+TENNIS_MODEL_PATH = "model/best-tennis-s.rknn"
+
+TARGET_MODEL_PATH = "model/best-digit-n.rknn"
+
 MODEL_IMGSIZE = 320
+
+IMG_SIZE = (320, 320)
+
+TENNIS_CLASSES = ("ball")
+
+TENNIS_ID_LIST = [1]
+
+TARGET_CLASSES = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
+
+TARGET_ID_LIST = [1, 2, 3, 4, 5, 6, 7, 8, 9]

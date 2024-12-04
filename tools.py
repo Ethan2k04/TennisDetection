@@ -1,5 +1,7 @@
-from libs import *
-from constants import CONFIG_FILE, UPPER_BLACK, LOWER_WHITE, BALL_CONF, TARGET_CONF, BALL_HIT_WAIT_SEC, RETARGET_WAIT_SEC, REFINE_KSIZE, ERODE_KSIZE, ERODE_ITER
+import cv2
+import json
+
+from constants import *
 
 
 def refine_mask(mask, ksize):
@@ -45,6 +47,7 @@ def create_trackbar():
     cv2.createTrackbar("REFINE_KSIZE", "Trackbars", REFINE_KSIZE, 30, nothing)
     cv2.createTrackbar("ERODE_KSIZE", "Trackbars", ERODE_KSIZE, 30, nothing)
     cv2.createTrackbar("ERODE_ITER", "Trackbars", ERODE_ITER, 10, nothing)
+
 
 def get_trackbar_values_filter():
     # 获取滑块的当前值
