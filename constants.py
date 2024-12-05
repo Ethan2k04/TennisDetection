@@ -16,20 +16,20 @@ CENTER_Y = (SCREEN_WIDTH - SCREEN_HEIGHT) // 2
 RETARGET_WAIT_SEC = 3
 
 # 等待多少秒判断碰撞
-BALL_HIT_WAIT_SEC = 1
+BALL_HIT_WAIT_SEC = 100
 
 # 黑色的HSV范围
 LOWER_BLACK = np.array([0, 0, 0])
-UPPER_BLACK = np.array([180, 255, 70])
+UPPER_BLACK = np.array([180, 255, 30])
 
 # 白色的HSV范围
-LOWER_WHITE = np.array([0, 0, 130])
+LOWER_WHITE = np.array([0, 0, 150])
 UPPER_WHITE = np.array([180, 50, 255])
 
 # 标靶检测形态学操作参数
-REFINE_KSIZE = 15
-ERODE_KSIZE = 5
-ERODE_ITER = 5
+REFINE_KSIZE = 12
+ERODE_KSIZE = 4
+ERODE_ITER = 3
 
 # 随机数种子
 RANDOM_STATE = 42
@@ -59,16 +59,16 @@ SCORE_ORG = (30, 50)
 MIN_POLY = 5
 
 # 非椭圆容忍度
-PERI_BIAS = 0.3
+PERI_BIAS = 0.1
 
 # 网球置信度
 BALL_CONF = 0.05
 
 # 标靶置信度
-TARGET_CONF = 0.2
+TARGET_CONF = 0.5
 
 # 模型相关参数
-OBJ_THRESH = 0.25
+OBJ_THRESH = 0.10
 
 NMS_THRESH = 0.45
 
@@ -78,7 +78,7 @@ TARGET_MODEL_PATH = "model/best-digit-n.rknn"
 
 MODEL_IMGSIZE = 320
 
-IMG_SIZE = (320, 320)
+IMG_SIZE = (640, 640)
 
 TENNIS_CLASSES = ("ball")
 

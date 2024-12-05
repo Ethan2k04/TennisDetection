@@ -39,7 +39,7 @@ def process_stream():
     score_player = 0
     last_saved_time = time.time()
     ball_timestamps = {}
-    target_set = False
+    target_set = True
 
     # 创建滑块
     create_trackbar()
@@ -107,6 +107,7 @@ def process_stream():
                                                        "angle": angle}
                         target_id += 1
                 save_target_to_config(target_data)
+                
                 print(f"\033[31m[Undef] Target saved to config at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
                 last_saved_time = time.time()
 
@@ -145,7 +146,7 @@ def process_stream():
         frame = draw_ball_boxes(frame, ball_result)
 
         # 保存每一帧到视频文件
-        out.write(frame)
+        # out.write(frame)
 
         # 显示图像
         cv2.imshow("Real-Time Target Detection", frame)
@@ -154,7 +155,7 @@ def process_stream():
             break
 
     cap.release()
-    out.release()
+    # out.release()
     cv2.destroyAllWindows()
 
 

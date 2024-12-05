@@ -26,17 +26,21 @@ def detect_balls(frame):
     ball_conf, _ = get_trackbar_values_confidence()
     img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = np.expand_dims(img, axis=0)
     outputs = model_tennis.run([img])
-    boxes, _, _ = post_process(outputs)
+    boxes = []
+    if outputs is not None:
+        boxes, _, _ = post_process(outputs)
 
     # 用于存储所有网球框的位置信息
     ball_positions = []
 
     # 遍历检测结果并提取位置信息
     if boxes is not None:
+        boxes = co_helper.get_real_box(boxes)
         for box in boxes:
-            x1, y1, x2, y2 = box
-            ball_positions.append((int(x1), int(y1), int(x2), int(y2)))
+            top, left, right, bottom = box
+            ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
     return ball_positions
 
@@ -46,13 +50,13 @@ def draw_ball_boxes(frame, ball_positions):
     """
     根据存储的网球框位置信息，在帧上绘制框。
     """
-    for (x1, y1, x2, y2) in ball_positions:
+    for box in ball_positions:
+        top, left, right, bottom = [int(_b) for _b in box]
         # 绘制矩形框，绿色，线宽3
-        cv2.rectangle(frame, (x1, y1), (x2, y2), BALL_COLOR, LINE_THICKNESS)
-
+        cv2.rectangle(frame, (top, left), (right, bottom), BALL_COLOR, LINE_THICKNESS)
         # 添加标签文字
         label = "Ball"
-        text_position = (x2 + TEXT_MARGIN, y1)  # 文字位置设置在圆的右侧
+        text_position = (top, left - 6)  # 文字位置设置在圆的右侧
         cv2.putText(frame, label, text_position, cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, BALL_COLOR, LINE_THICKNESS)
 
     return frame
@@ -185,25 +189,31 @@ def find_target_contours(frame):
     # 用于保存符合 YOLO 检测条件的轮廓
     valid_ellipses = []
 
+    # print(f"eliipses:{len(ellipses)}")    # 调试用
+
     # 遍历椭圆轮廓并进行 YOLO 检测
     for contour in ellipses:
         # 获取轮廓的边界框
         x, y, w, h = cv2.boundingRect(contour)
         cropped_region = frame[y: y + h, x: x + w]  # 截取对应的区域
-
+        # cv2.imshow("cropped_region", cropped_region)  # 调试用
         # 使用YOLO模型进行检测
         _, target_conf = get_trackbar_values_confidence()
         img = co_helper.letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        outputs = model_tennis.run([img])
-        _, _, scores = post_process(outputs)
+        img = np.expand_dims(img, axis=0)
+        outputs = model_digit.run([img])
+        scores = []
+        if outputs is not None:
+            boxes, _, _ = post_process(outputs)
 
         # 判断检测是否有结果，如果有结果则保留该轮廓
-        if max(scores) > target_conf:  # 判断是否有检测到目标
+        if boxes is not None and len(scores) > 0:
             valid_ellipses.append(contour)  # 如果检测到目标，保留该轮廓
 
     # 计算所有有效椭圆的面积并排序
     area_list = sorted([cv2.contourArea(contour) for contour in valid_ellipses])
+    # print(f"valid_ellipses: {len(valid_ellipses)}")   # 调试用
 
     # 识别的标靶结果
     result = {"undef": []}
