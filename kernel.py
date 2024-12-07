@@ -199,7 +199,7 @@ def find_target_contours(frame):
         # cv2.imshow("cropped_region", cropped_region)  # 调试用
         # 使用YOLO模型进行检测
         _, target_conf = get_trackbar_values_confidence()
-        img = co_helper.letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
+        img = co_helper.    letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = np.expand_dims(img, axis=0)
         outputs = model_digit.run([img])
