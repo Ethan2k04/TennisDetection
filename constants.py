@@ -80,21 +80,14 @@ TARGET_CONF = 0.5
 
 # 模型相关参数
 OBJ_THRESH = 0.10
-
 NMS_THRESH = 0.45
-
 TENNIS_MODEL_PATH = "model/best-tennis-s.rknn"
-
 TARGET_MODEL_PATH = "model/best-digit-n.rknn"
-
 MODEL_IMGSIZE = 320
-
 IMG_SIZE = (640, 640)
-
 TENNIS_CLASSES = ("ball")
-
 TENNIS_ID_LIST = [1]
-
 TARGET_CLASSES = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
-
 TARGET_ID_LIST = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+AREA_THRESHOLD_PERCENTAGE = 10

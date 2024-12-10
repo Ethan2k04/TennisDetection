@@ -2,25 +2,31 @@ import sys
 import time
 import json
 import cv2
+import os
 import threading
 from network import push_data
 from kernel import detect_balls, detect_target, is_target_result_valid, detect_collision, draw_target_boxes, \
     draw_ball_boxes
-from tools import create_trackbar, save_target_to_config
+from tools import create_trackbar, save_target_to_config,  get_trackbar_reset_target_switch
 from constants import CONFIG_FILE, SCORE_ORG, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS, FPS_SCALE, FPS_COLOR, \
-    FPS_THICKNESS, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL
+    FPS_THICKNESS, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE
 
 
 # 目标管理类
 class TargetManager:
-    def __init__(self, num_target: int):
+    def __init__(self):
         self.is_target_set = False
         self.last_relocate_time = time.time()
-        self.num_target = num_target
+        self.num_target = 0
         self.target_data = {}
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'r') as file:
+                settings = json.load(file)
+                self.num_target = settings["num_target"]
 
     def relocate_target(self, frame, retarget_wait_sec: float) -> None:
-        if not self.is_target_set and time.time() - self.last_relocate_time > retarget_wait_sec:
+        force_retarget = get_trackbar_reset_target_switch()
+        if (not self.is_target_set or force_retarget) and time.time() - self.last_relocate_time > retarget_wait_sec:
             target_result = detect_target(frame)
             if is_target_result_valid(target_result, self.num_target):
                 self.target_data = self._parse_target_result(target_result)
@@ -28,7 +34,10 @@ class TargetManager:
                 print(f"[Valid] Target saved at {time.strftime('%Y-%m-%d %H:%M:%S')}")
                 self.is_target_set = True
             else:
+                self.target_data = self._parse_target_result(target_result)
+                save_target_to_config(self.target_data)
                 print(f"[Invalid] No valid target detected. Retrying...")
+                self.is_target_set = False
             self.last_relocate_time = time.time()
 
     @staticmethod
@@ -60,7 +69,7 @@ class VideoProcessor:
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
-        self.target_manager = TargetManager(num_target=3)
+        self.target_manager = TargetManager()
         self.score_player = 0
         self.last_frame_time = time.time()
         self.ball_timestamps = {}

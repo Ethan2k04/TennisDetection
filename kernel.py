@@ -17,6 +17,8 @@ model_digit = setup_model(TARGET_MODEL_PATH)
 co_helper = COCO_test_helper(enable_letter_box=True)
 
 
+area_threshhold = 0
+
 # 使用yolo11检测网球
 def detect_balls(frame):
     """
@@ -193,25 +195,29 @@ def detect_target(frame):
 
     # 遍历椭圆轮廓并进行 YOLO 检测
     for contour in ellipses:
-        # 获取轮廓的边界框
-        x, y, w, h = cv2.boundingRect(contour)
-        cropped_region = frame[y: y + h, x: x + w]  # 截取对应的区域
-        # cv2.imshow("cropped_region", cropped_region)  # 调试用
-        # 使用YOLO模型进行检测
-        _, target_conf = get_trackbar_values_confidence()
-        img = co_helper.letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = np.expand_dims(img, axis=0)
-        outputs = model_digit.run([img])
-        if outputs is not None:
-            boxes, _, _ = post_process(outputs)
+        global area_threshhold
+        if cv2.contourArea(contour) > area_threshhold:
+            # 获取轮廓的边界框
+            x, y, w, h = cv2.boundingRect(contour)
+            cropped_region = frame[y: y + h, x: x + w]  # 截取对应的区域
+            # cv2.imshow("cropped_region", cropped_region)  # 调试用
+            # 使用YOLO模型进行检测
+            _, target_conf = get_trackbar_values_confidence()
+            img = co_helper.letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = np.expand_dims(img, axis=0)
+            outputs = model_digit.run([img])
+            if outputs is not None:
+                boxes, _, _ = post_process(outputs)
 
-        # 判断检测是否有结果，如果有结果则保留该轮廓
-        if boxes is not None and len(boxes) > 0:
-            valid_ellipses.append(contour)  # 如果检测到目标，保留该轮廓
+            # 判断检测是否有结果，如果有结果则保留该轮廓
+            if boxes is not None and len(boxes) > 0:
+                valid_ellipses.append(contour)  # 如果检测到目标，保留该轮廓
 
     # 计算所有有效椭圆的面积并排序
     area_list = sorted([cv2.contourArea(contour) for contour in valid_ellipses])
+    if len(area_list) > 0:
+        area_threshhold = max(area_list) / AREA_THRESHOLD_PERCENTAGE
     # print(f"valid_ellipses: {len(valid_ellipses)}")   # 调试用
 
     # 识别的标靶结果
