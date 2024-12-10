@@ -37,7 +37,6 @@ def create_trackbar():
     # 创建一个窗口，便于添加滑块
     cv2.namedWindow("Trackbars", cv2.WINDOW_NORMAL)
 
-    # 只为黑色和白色的 V 分量创建滑块
     cv2.createTrackbar("UP_V_BLACK", "Trackbars", UPPER_BLACK[2], 255, nothing)
     cv2.createTrackbar("LOW_V_WHITE", "Trackbars", LOWER_WHITE[2], 255, nothing)
     cv2.createTrackbar("BALL_CONF", "Trackbars", int(BALL_CONF * 100), 100, nothing)
@@ -47,6 +46,7 @@ def create_trackbar():
     cv2.createTrackbar("REFINE_KSIZE", "Trackbars", REFINE_KSIZE, 30, nothing)
     cv2.createTrackbar("ERODE_KSIZE", "Trackbars", ERODE_KSIZE, 30, nothing)
     cv2.createTrackbar("ERODE_ITER", "Trackbars", ERODE_ITER, 10, nothing)
+    cv2.createTrackbar("RESET_TARGET_SWITCH", "Trackbars", 0, 1, nothing)
 
 
 def get_trackbar_values_filter():
@@ -80,3 +80,10 @@ def get_trackbar_values_morphology():
     erode_iter = cv2.getTrackbarPos("ERODE_ITER", "Trackbars")
 
     return max(refine_ksize, 1), erode_ksize, erode_iter
+
+def get_trackbar_reset_target_switch():
+    # Get the value of the "RESET_TARGET_SWITCH" trackbar
+    switch_value = cv2.getTrackbarPos("RESET_TARGET_SWITCH", "Trackbars")
+    
+    # Return the boolean value (0 = No, 1 = Yes)
+    return bool(switch_value)

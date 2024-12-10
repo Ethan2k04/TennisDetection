@@ -3,7 +3,7 @@ import time
 
 from kernel import *
 from constants import *
-from tools import save_target_to_config, create_trackbar, get_trackbar_values_wait_sec
+from tools import *
 
 
 # 处理图片的函数
@@ -30,16 +30,18 @@ def process_video(video_source):
 
 # 实时视频流处理函数
 def process_stream():
-    cap = cv2.VideoCapture("test_data/video/t6bn.mp4")  # 0 代表默认摄像头
+    cap = cv2.VideoCapture(0)  # 0 代表默认摄像头
 
     if not cap.isOpened():
         print("Error: Unable to access camera")
         return
 
     score_player = 0
+    last_frame_time = time.time()
     last_saved_time = time.time()
+    last_relocate_time = time.time()
     ball_timestamps = {}
-    target_set = True
+    is_target_set = False
 
     # 创建滑块
     create_trackbar()
@@ -53,6 +55,7 @@ def process_stream():
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for .mp4 files
     out = cv2.VideoWriter('result.mp4', fourcc, fps, (frame_width, frame_height))
 
+    is_retarget_timeout = False
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -77,44 +80,50 @@ def process_stream():
 
         # 检测网球
         ball_result = detect_balls(frame)
+        if not is_target_set:
+            if time.time() - last_relocate_time > retarget_wait_sec:
+                is_retarget_timeout = True
 
-        if not target_set:
-            # 如果尚未设定好标靶的位置参数，则进行下面的操作
-            target_result = find_target_contours(frame)
+            if is_retarget_timeout:              
+                is_retarget_timeout = False      
+                last_relocate_time = time.time()
+                # 如果尚未设定好标靶的位置参数，则进行下面的操作
+                target_result = find_target_contours(frame)
 
-            target_id = 0
-            target_data = {}
-            if is_target_result_valid(target_result, num_target):
-                # 如果目标符合要求，保存到配置文件
-                for score, contours in target_result.items():
-                    for contour in contours:
-                        (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
-                        target_data[f"{target_id}"] = {"cls": score, "center_x": x, "center_y": y,
-                                                       "major_axis": major_axis, "minor_axis": minor_axis,
-                                                       "angle": angle}
-                        target_id += 1
-                save_target_to_config(target_data)
-                print(f"\033[32m[Valid] Target saved to config at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
-                target_set = True
-                last_saved_time = time.time()
-            elif len(target_result["undef"]) > 0:
-                # 如果目标不符合要求，全部标记为 undef 并保存到配置文件
-                for score, contours in target_result.items():
-                    for contour in contours:
-                        (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
-                        target_data[f"{target_id}"] = {"cls": "undef", "center_x": x, "center_y": y,
-                                                       "major_axis": major_axis, "minor_axis": minor_axis,
-                                                       "angle": angle}
-                        target_id += 1
-                save_target_to_config(target_data)
-                
-                print(f"\033[31m[Undef] Target saved to config at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
-                last_saved_time = time.time()
+                target_id = 0
+                target_data = {}
+                if is_target_result_valid(target_result, num_target):
+                    # 如果目标符合要求，保存到配置文件
+                    for score, contours in target_result.items():
+                        for contour in contours:
+                            (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
+                            target_data[f"{target_id}"] = {"cls": score, "center_x": x, "center_y": y,
+                                                        "major_axis": major_axis, "minor_axis": minor_axis,
+                                                        "angle": angle}
+                            target_id += 1
+                    save_target_to_config(target_data)
+                    print(f"\033[32m[Valid] Target saved to config at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
+                    is_target_set = True
+                    last_saved_time = time.time()
+                elif len(target_result["undef"]) > 0:
+                    # 如果目标不符合要求，全部标记为 undef 并保存到配置文件
+                    for score, contours in target_result.items():
+                        for contour in contours:
+                            (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
+                            target_data[f"{target_id}"] = {"cls": "undef", "center_x": x, "center_y": y,
+                                                        "major_axis": major_axis, "minor_axis": minor_axis,
+                                                        "angle": angle}
+                            target_id += 1
+                    save_target_to_config(target_data)
+                    
+                    print(f"\033[31m[Undef] Target saved to config at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
+                    last_saved_time = time.time()
 
-        if target_set and time.time() - last_saved_time > retarget_wait_sec:
-            # 如果已设定好标靶位置且 WAIT_SEC 秒已过，设置 target_set = False 并在下一帧更新标靶位置
-            target_set = False
-            print(f"{retarget_wait_sec}s has passed, detect target again.")
+        if is_target_set:
+            if get_trackbar_reset_target_switch():
+                # 如果已设定好标靶位置且 WAIT_SEC 秒已过，设置 is_target_set = False 并在下一帧更新标靶位置
+                is_target_set = False
+                print(f"{retarget_wait_sec}s has passed, detect target again.")
 
         if os.path.exists(CONFIG_FILE):
             # 读取配置文件
@@ -141,6 +150,12 @@ def process_stream():
         # 显示分数
         cv2.putText(frame, f"Score: {score_player}", SCORE_ORG, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR,
                     SCORE_THICKNESS)
+
+        # 计算和显示帧率
+        current_time = time.time()
+        frame_rate = round(1 / (current_time - last_frame_time))
+        last_frame_time = current_time
+        cv2.putText(frame, f"FPS: {frame_rate}", (frame_width - 160, 30), cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE, FPS_COLOR, FPS_THICKNESS)
 
         # 绘制网球的目标框
         frame = draw_ball_boxes(frame, ball_result)

@@ -203,12 +203,11 @@ def find_target_contours(frame):
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = np.expand_dims(img, axis=0)
         outputs = model_digit.run([img])
-        scores = []
         if outputs is not None:
             boxes, _, _ = post_process(outputs)
 
         # 判断检测是否有结果，如果有结果则保留该轮廓
-        if boxes is not None and len(scores) > 0:
+        if boxes is not None and len(boxes) > 0:
             valid_ellipses.append(contour)  # 如果检测到目标，保留该轮廓
 
     # 计算所有有效椭圆的面积并排序
