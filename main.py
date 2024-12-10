@@ -1,195 +1,143 @@
 import sys
 import time
-
-from kernel import *
-from constants import *
-from tools import *
-
-
-# 处理图片的函数
-def process_image(image_path):
-    # 读取图片
-    frame = cv2.imread(image_path)
-    if frame is None:
-        print("Error: Unable to load image")
-        return
-
-    # TODO 处理单张图片
-
-    # 显示处理后的图片
-    cv2.imshow("Processed Image", frame)
-    cv2.waitKey(0)  # 等待用户按键
-    cv2.destroyAllWindows()
+import json
+import cv2
+import threading
+from network import push_data
+from kernel import detect_balls, detect_target, is_target_result_valid, detect_collision, draw_target_boxes, \
+    draw_ball_boxes
+from tools import create_trackbar, save_target_to_config
+from constants import CONFIG_FILE, SCORE_ORG, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS, FPS_SCALE, FPS_COLOR, \
+    FPS_THICKNESS, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL
 
 
-# 处理视频的函数
-def process_video(video_source):
-    # TODO 处理视频
-    pass
+# 目标管理类
+class TargetManager:
+    def __init__(self, num_target: int):
+        self.is_target_set = False
+        self.last_relocate_time = time.time()
+        self.num_target = num_target
+        self.target_data = {}
+
+    def relocate_target(self, frame, retarget_wait_sec: float) -> None:
+        if not self.is_target_set and time.time() - self.last_relocate_time > retarget_wait_sec:
+            target_result = detect_target(frame)
+            if is_target_result_valid(target_result, self.num_target):
+                self.target_data = self._parse_target_result(target_result)
+                save_target_to_config(self.target_data)
+                print(f"[Valid] Target saved at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                self.is_target_set = True
+            else:
+                print(f"[Invalid] No valid target detected. Retrying...")
+            self.last_relocate_time = time.time()
+
+    @staticmethod
+    def _parse_target_result(target_result: dict) -> dict:
+        target_data = {}
+        target_id = 0
+        for score, contours in target_result.items():
+            for contour in contours:
+                (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
+                target_data[f"{target_id}"] = {
+                    "cls": score,
+                    "center_x": x,
+                    "center_y": y,
+                    "major_axis": major_axis,
+                    "minor_axis": minor_axis,
+                    "angle": angle,
+                }
+                target_id += 1
+        return target_data
 
 
-# 实时视频流处理函数
-def process_stream():
-    cap = cv2.VideoCapture(0)  # 0 代表默认摄像头
+# 视频处理类
+class VideoProcessor:
+    def __init__(self):
+        self.cap = cv2.VideoCapture(0)
+        if not self.cap.isOpened():
+            raise RuntimeError("Unable to access camera")
 
-    if not cap.isOpened():
-        print("Error: Unable to access camera")
-        return
+        self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        self.target_manager = TargetManager(num_target=3)
+        self.score_player = 0
+        self.last_frame_time = time.time()
+        self.ball_timestamps = {}
 
-    score_player = 0
-    last_frame_time = time.time()
-    last_saved_time = time.time()
-    last_relocate_time = time.time()
-    ball_timestamps = {}
-    is_target_set = False
+    def process_stream(self) -> None:
+        create_trackbar()
+        while True:
+            ret, frame = self.cap.read()
+            if not ret:
+                print("Error: Failed to grab frame")
+                break
 
-    # 创建滑块
-    create_trackbar()
+            self.target_manager.relocate_target(frame, retarget_wait_sec=RETARGET_WAIT_SEC)
+            # if self.target_manager.is_target_set:
+            frame = self._update_score(frame)
 
-    # Get video properties to save the output with the same properties
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
+            self._display_frame(frame)
 
-    # Set up VideoWriter to save the result
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for .mp4 files
-    out = cv2.VideoWriter('result.mp4', fourcc, fps, (frame_width, frame_height))
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        self._cleanup()
 
-    is_retarget_timeout = False
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("Error: Failed to grab frame")
-            break
-
-        # 从元信息中读取参数
-        score_list = []
-        num_target = 0
-        ball_hit_wait_sec, retarget_wait_sec = get_trackbar_values_wait_sec()
-        if os.path.exists(SETTINGS_FILE):
-            with open(SETTINGS_FILE, 'r') as file:
-                settings = json.load(file)
-
-            score_list = settings["score_list"]
-            num_target = settings["num_target"]
-
-        # 定义检测结果
-        target_result = {"undef": []}
-        for score in score_list:
-            target_result[str(score)] = []
-
-        # 检测网球
+    def _update_score(self, frame) -> cv2.Mat:
         ball_result = detect_balls(frame)
-        if not is_target_set:
-            if time.time() - last_relocate_time > retarget_wait_sec:
-                is_retarget_timeout = True
-
-            if is_retarget_timeout:              
-                is_retarget_timeout = False      
-                last_relocate_time = time.time()
-                # 如果尚未设定好标靶的位置参数，则进行下面的操作
-                target_result = find_target_contours(frame)
-
-                target_id = 0
-                target_data = {}
-                if is_target_result_valid(target_result, num_target):
-                    # 如果目标符合要求，保存到配置文件
-                    for score, contours in target_result.items():
-                        for contour in contours:
-                            (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
-                            target_data[f"{target_id}"] = {"cls": score, "center_x": x, "center_y": y,
-                                                        "major_axis": major_axis, "minor_axis": minor_axis,
-                                                        "angle": angle}
-                            target_id += 1
-                    save_target_to_config(target_data)
-                    print(f"\033[32m[Valid] Target saved to config at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
-                    is_target_set = True
-                    last_saved_time = time.time()
-                elif len(target_result["undef"]) > 0:
-                    # 如果目标不符合要求，全部标记为 undef 并保存到配置文件
-                    for score, contours in target_result.items():
-                        for contour in contours:
-                            (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
-                            target_data[f"{target_id}"] = {"cls": "undef", "center_x": x, "center_y": y,
-                                                        "major_axis": major_axis, "minor_axis": minor_axis,
-                                                        "angle": angle}
-                            target_id += 1
-                    save_target_to_config(target_data)
-                    
-                    print(f"\033[31m[Undef] Target saved to config at {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}")
-                    last_saved_time = time.time()
-
-        if is_target_set:
-            if get_trackbar_reset_target_switch():
-                # 如果已设定好标靶位置且 WAIT_SEC 秒已过，设置 is_target_set = False 并在下一帧更新标靶位置
-                is_target_set = False
-                print(f"{retarget_wait_sec}s has passed, detect target again.")
-
-        if os.path.exists(CONFIG_FILE):
-            # 读取配置文件
-            with open(CONFIG_FILE, 'r') as file:
-                config = json.load(file)
-
-            # 根据配置中的目标框绘制
-            draw_target_boxes(frame, config)
-
-            # 检测网球并更新分数
-            ball_id = 0
-            for ball in ball_result:
-                ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
-                is_collided, score = detect_collision(ball_center, config)
-                if is_collided:
-                    if ball_id not in ball_timestamps:
-                        ball_timestamps[ball_id] = time.time()  # 记录网球进入标靶区域的时间
-                        # TODO 尚未支持多目标的情况
-                        # ball_id += 1
-                    elif time.time() - ball_timestamps[ball_id] > ball_hit_wait_sec:  # 判断是否已超过2秒
-                        score_player += score
-                        ball_timestamps.pop(ball_id)  # 防止多次增加分数
-
-        # 显示分数
-        cv2.putText(frame, f"Score: {score_player}", SCORE_ORG, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR,
-                    SCORE_THICKNESS)
-
-        # 计算和显示帧率
-        current_time = time.time()
-        frame_rate = round(1 / (current_time - last_frame_time))
-        last_frame_time = current_time
-        cv2.putText(frame, f"FPS: {frame_rate}", (frame_width - 160, 30), cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE, FPS_COLOR, FPS_THICKNESS)
-
-        # 绘制网球的目标框
+        with open(CONFIG_FILE, 'r') as file:
+            config = json.load(file)
         frame = draw_ball_boxes(frame, ball_result)
+        frame = draw_target_boxes(frame, config)
+        for ball_id, ball in enumerate(ball_result):
+            ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
+            is_collided, score = detect_collision(ball_center, config)
+            if is_collided:
+                self.score_player += score
+                score_data = {
+                    "x": ball_center[0],
+                    "y": ball_center[1],
+                    "score": score
+                }
 
-        # 保存每一帧到视频文件
-        # out.write(frame)
+                # 使用线程执行 push_data
+                push_thread = threading.Thread(
+                    target=push_data,
+                    args=(score_data, MAX_RETRY, RETRY_INTERVAL)
+                )
+                push_thread.start()
 
-        # 显示图像
+        return frame
+
+    def _display_frame(self, frame) -> None:
+        current_time = time.time()
+        frame_rate = round(1 / (current_time - self.last_frame_time))
+        self.last_frame_time = current_time
+        cv2.putText(frame, f"Score: {self.score_player}", SCORE_ORG, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR,
+                    SCORE_THICKNESS)
+        cv2.putText(frame, f"FPS: {frame_rate}", (self.frame_width - 160, 30), cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE,
+                    FPS_COLOR, FPS_THICKNESS)
         cv2.imshow("Real-Time Target Detection", frame)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    # out.release()
-    cv2.destroyAllWindows()
+    def _cleanup(self) -> None:
+        self.cap.release()
+        cv2.destroyAllWindows()
 
 
+# 主函数
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python script.py <video_path or image_path>")
+        print("Usage: python3 main.py <video_path or image_path or 0 for stream>")
         sys.exit(1)
 
     input_path = sys.argv[1]
-
-    # 如果输入的是视频文件
     if input_path.endswith(('.mp4', '.avi', '.mov')):
-        process_video(input_path)
-    # 如果输入的是图片文件
+        print("Video processing not implemented yet")
     elif input_path.endswith(('.jpg', '.png', '.jpeg')):
-        process_image(input_path)
-    # 如果输入为 0，代表实时视频流处理
+        print("Image processing not implemented yet")
     elif input_path == "0":
-        process_stream()
+        processor = VideoProcessor()
+        processor.process_stream()
     else:
         print(f"Error: Unsupported file type or invalid input {input_path}")
         sys.exit(1)

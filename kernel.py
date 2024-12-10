@@ -149,7 +149,7 @@ def is_ellipse(contour):
 
 
 # 检测目标轮廓
-def find_target_contours(frame):
+def detect_target(frame):
     """
     检测 frame 中的标靶轮廓，返回字典结果
     """
