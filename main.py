@@ -73,6 +73,7 @@ class VideoProcessor:
         self.score_player = 0
         self.last_frame_time = time.time()
         self.ball_timestamps = {}
+        self.ball_trajectories = {}  # 记录网球踪迹
 
     def process_stream(self) -> None:
         create_trackbar()
@@ -99,7 +100,7 @@ class VideoProcessor:
         frame = draw_target_boxes(frame, config)
         for ball_id, ball in enumerate(ball_result):
             ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
-            is_collided, score = detect_collision(ball_center, config)
+            is_collided, score = detect_collision(ball_id, ball_center, config, self.ball_trajectories)
             if is_collided:
                 self.score_player += score
                 score_data = {

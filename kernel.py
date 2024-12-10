@@ -277,18 +277,42 @@ def draw_target_boxes(frame, config):
     return frame
 
 
-# 根据检出的网球和标靶位置判断是否碰撞
-def detect_collision(ball_center, config):
+# 根据网球踪迹拟合直线并判断是否碰撞
+def detect_collision(ball_id, ball_center, config, ball_trajectories):
+    """
+    :param ball_id: 当前网球的唯一标识
+    :param ball_center: 网球中心点坐标 (x, y)
+    :param config: 靶子区域配置
+    :param ball_trajectories: 字典，记录所有网球的轨迹
+    :return: 是否发生碰撞、得分
+    """
+    # 记录当前网球的踪迹
+    if ball_id not in ball_trajectories:
+        ball_trajectories[ball_id] = []
+    ball_trajectories[ball_id].append(ball_center)
+
+    # 判断是否进入靶子区域
     for key, value in config.items():
         target_center = (int(value["center_x"]), int(value["center_y"]))
         target_width = int(value["minor_axis"])
         target_height = int(value["major_axis"])
-        if (target_center[0] - target_width // 2 <= ball_center[0] <= target_center[
-            0] + target_width // 2) and \
-                (target_center[1] - target_height // 2 <= ball_center[1] <= target_center[
-                    1] + target_height // 2):
-            if value["cls"] != "undef":
-                return True, int(value["cls"])
+
+        if (target_center[0] - target_width // 2 <= ball_center[0] <= target_center[0] + target_width // 2) and \
+                (target_center[1] - target_height // 2 <= ball_center[1] <= target_center[1] + target_height // 2):
+            if len(ball_trajectories[ball_id]) > 5:  # 保证有足够的点进行拟合
+                trajectory = np.array(ball_trajectories[ball_id])
+                x = trajectory[:, 0]
+                y = trajectory[:, 1]
+                # 用最小二乘法拟合直线
+                coeffs = np.polyfit(x, y, 1)  # 一次多项式拟合
+                residuals = np.sum((np.polyval(coeffs, x) - y) ** 2)
+
+                # 如果残差过大，认为发生了碰撞
+                if residuals > 100:  # 调整阈值以适应场景
+                    del ball_trajectories[ball_id]
+                    return True, int(value["cls"])
+            
+            return False, int(value["cls"])
 
     return False, 0
 
