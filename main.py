@@ -52,10 +52,10 @@ class TargetManager:
 
 # 视频处理类
 class VideoProcessor:
-    def __init__(self):
-        self.cap = cv2.VideoCapture(0)
+    def __init__(self, input_source=0):
+        self.cap = cv2.VideoCapture(input_source)
         if not self.cap.isOpened():
-            raise RuntimeError("Unable to access camera")
+            raise RuntimeError(f"Unable to access input source: {input_source}")
 
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -70,11 +70,10 @@ class VideoProcessor:
         while True:
             ret, frame = self.cap.read()
             if not ret:
-                print("Error: Failed to grab frame")
+                print("End of video or failed to grab frame")
                 break
 
             self.target_manager.relocate_target(frame, retarget_wait_sec=RETARGET_WAIT_SEC)
-            # if self.target_manager.is_target_set:
             frame = self._update_score(frame)
 
             self._display_frame(frame)
@@ -117,7 +116,7 @@ class VideoProcessor:
                     SCORE_THICKNESS)
         cv2.putText(frame, f"FPS: {frame_rate}", (self.frame_width - 160, 30), cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE,
                     FPS_COLOR, FPS_THICKNESS)
-        cv2.imshow("Real-Time Target Detection", frame)
+        cv2.imshow("Video Detection", frame)
 
     def _cleanup(self) -> None:
         self.cap.release()
@@ -132,11 +131,12 @@ def main():
 
     input_path = sys.argv[1]
     if input_path.endswith(('.mp4', '.avi', '.mov')):
-        print("Video processing not implemented yet")
+        processor = VideoProcessor(input_source=input_path)
+        processor.process_stream()
     elif input_path.endswith(('.jpg', '.png', '.jpeg')):
         print("Image processing not implemented yet")
     elif input_path == "0":
-        processor = VideoProcessor()
+        processor = VideoProcessor(input_source=0)
         processor.process_stream()
     else:
         print(f"Error: Unsupported file type or invalid input {input_path}")
