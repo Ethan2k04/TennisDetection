@@ -5,11 +5,11 @@ import cv2
 import os
 import threading
 from network import push_data
-from kernel import detect_balls, detect_target, is_target_result_valid, detect_collision, draw_target_boxes, \
+from kernel import detect_balls, detect_target, is_target_result_valid, update_ball_status, draw_target_boxes, \
     draw_ball_boxes
 from tools import create_trackbar, save_target_to_config,  get_trackbar_reset_target_switch
 from constants import CONFIG_FILE, SCORE_ORG, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS, FPS_SCALE, FPS_COLOR, \
-    FPS_THICKNESS, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE
+    FPS_THICKNESS, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE, BALL_HIT_WAIT_SEC
 
 
 # 目标管理类
@@ -73,7 +73,8 @@ class VideoProcessor:
         self.score_player = 0
         self.last_frame_time = time.time()
         self.ball_timestamps = {}
-        self.ball_trajectories = {}  # 记录网球踪迹
+        self.ball_status = {}
+        self.last_collision_time = time.time()
 
     def process_stream(self) -> None:
         create_trackbar()
@@ -98,10 +99,13 @@ class VideoProcessor:
             config = json.load(file)
         frame = draw_ball_boxes(frame, ball_result)
         frame = draw_target_boxes(frame, config)
+
         for ball_id, ball in enumerate(ball_result):
             ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
-            is_collided, score = detect_collision(ball_id, ball_center, config, self.ball_trajectories)
-            if is_collided:
+            collision_detected, score, left_target = update_ball_status(ball_id, ball_center, config, self.ball_status)
+            
+            if collision_detected and abs(time.time() - self.last_collision_time > BALL_HIT_WAIT_SEC):
+                self.last_collision_time = time.time()
                 self.score_player += score
                 score_data = {
                     "x": ball_center[0],
@@ -109,12 +113,16 @@ class VideoProcessor:
                     "score": score
                 }
 
-                # 使用线程执行 push_data
+                # 推送得分数据
                 push_thread = threading.Thread(
                     target=push_data,
                     args=(score_data, MAX_RETRY, RETRY_INTERVAL)
                 )
                 push_thread.start()
+
+            # 删除离开标靶区域且不需要追踪的球
+            if left_target:
+                del self.ball_status[ball_id]
 
         return frame
 

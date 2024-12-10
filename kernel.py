@@ -278,20 +278,27 @@ def draw_target_boxes(frame, config):
 
 
 # 根据网球踪迹拟合直线并判断是否碰撞
-def detect_collision(ball_id, ball_center, config, ball_trajectories):
+def update_ball_status(ball_id, ball_center, config, ball_status):
     """
+    更新网球状态并判断是否发生碰撞。
     :param ball_id: 当前网球的唯一标识
     :param ball_center: 网球中心点坐标 (x, y)
     :param config: 靶子区域配置
-    :param ball_trajectories: 字典，记录所有网球的轨迹
-    :return: 是否发生碰撞、得分
+    :param ball_status: 字典，记录每个网球的状态和轨迹
+    :return: (是否发生碰撞, 得分, 是否离开靶子区域)
     """
-    # 记录当前网球的踪迹
-    if ball_id not in ball_trajectories:
-        ball_trajectories[ball_id] = []
-    ball_trajectories[ball_id].append(ball_center)
+    if ball_id not in ball_status:
+        ball_status[ball_id] = {
+            "in_target": False,
+            "trajectory": [],
+            "last_target_score": 0,  # 记录最后在的靶子分数
+        }
 
-    # 判断是否进入靶子区域
+    status = ball_status[ball_id]
+    status["trajectory"].append(ball_center)
+
+    # 检测是否在靶子区域内
+    in_target = False
     for key, value in config.items():
         target_center = (int(value["center_x"]), int(value["center_y"]))
         target_width = int(value["minor_axis"])
@@ -299,22 +306,26 @@ def detect_collision(ball_id, ball_center, config, ball_trajectories):
 
         if (target_center[0] - target_width // 2 <= ball_center[0] <= target_center[0] + target_width // 2) and \
                 (target_center[1] - target_height // 2 <= ball_center[1] <= target_center[1] + target_height // 2):
-            if len(ball_trajectories[ball_id]) > 5:  # 保证有足够的点进行拟合
-                trajectory = np.array(ball_trajectories[ball_id])
-                x = trajectory[:, 0]
-                y = trajectory[:, 1]
-                # 用最小二乘法拟合直线
-                coeffs = np.polyfit(x, y, 1)  # 一次多项式拟合
-                residuals = np.sum((np.polyval(coeffs, x) - y) ** 2)
+            in_target = True
+            status["last_target_score"] = 0 if value["cls"] == "undef" else int(value["cls"])  # 记录靶子分数
+            break
 
-                # 如果残差过大，认为发生了碰撞
-                if residuals > 100:  # 调整阈值以适应场景
-                    del ball_trajectories[ball_id]
-                    return True, int(value["cls"])
-            
-            return False, int(value["cls"])
+    # 从进入靶子到离开靶子时，进行碰撞判断
+    if status["in_target"] and not in_target:
+        trajectory = np.array(status["trajectory"])
+        x = trajectory[:, 0]
+        y = trajectory[:, 1]
+        coeffs = np.polyfit(x, y, 1)
+        residuals = np.sum((np.polyval(coeffs, x) - y) ** 2)
 
-    return False, 0
+        # 碰撞判断：残差大于阈值
+        collision_detected = residuals > NONLINEAR_THRESHOLD  # 根据实际场景调整阈值
+        print(f"\n res:{residuals}\n")
+        return collision_detected, status["last_target_score"], True
+
+    # 更新状态
+    status["in_target"] = in_target
+    return False, 0, False
 
 
 def is_target_result_valid(target_result, num_target):
