@@ -16,7 +16,7 @@ CENTER_Y = (SCREEN_WIDTH - SCREEN_HEIGHT) // 2
 RETARGET_WAIT_SEC = 3
 
 # 等待多少秒判断碰撞
-BALL_HIT_WAIT_SEC = 100
+BALL_HIT_WAIT_SEC = 0.6
 
 # 黑色的HSV范围
 LOWER_BLACK = np.array([0, 0, 0])
@@ -64,7 +64,7 @@ SCORE_ORG = (30, 50)
 MIN_POLY = 5
 
 # 非椭圆容忍度
-PERI_BIAS = 0.1
+PERI_BIAS = 0.3
 
 # 网球置信度
 BALL_CONF = 0.05

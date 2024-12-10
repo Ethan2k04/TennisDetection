@@ -199,16 +199,15 @@ def find_target_contours(frame):
         # cv2.imshow("cropped_region", cropped_region)  # 调试用
         # 使用YOLO模型进行检测
         _, target_conf = get_trackbar_values_confidence()
-        img = co_helper.    letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
+        img = co_helper.letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = np.expand_dims(img, axis=0)
         outputs = model_digit.run([img])
-        scores = []
         if outputs is not None:
             boxes, _, _ = post_process(outputs)
 
         # 判断检测是否有结果，如果有结果则保留该轮廓
-        if boxes is not None and len(scores) > 0:
+        if boxes is not None and len(boxes) > 0:
             valid_ellipses.append(contour)  # 如果检测到目标，保留该轮廓
 
     # 计算所有有效椭圆的面积并排序
