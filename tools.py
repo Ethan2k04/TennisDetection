@@ -1,8 +1,14 @@
 import cv2
 import json
+import time
 import numpy as np
 from constants import CONFIG_FILE, UPPER_BLACK, LOWER_WHITE, BALL_CONF, TARGET_CONF, BALL_HIT_WAIT_SEC, \
                       RETARGET_WAIT_SEC, REFINE_KSIZE, ERODE_KSIZE, ERODE_ITER
+
+
+# 输出当前时间和日志信息
+def log_with_timestamp(message: str) -> None:
+    print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {message}")
 
 
 # 定义保存目标框信息的函数

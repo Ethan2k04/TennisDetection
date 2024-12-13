@@ -2,6 +2,7 @@ import requests
 import hashlib
 import time
 from constants import SALT, API_URL
+from tools import log_with_timestamp
 
 
 def generate_sign(data: dict, salt: str) -> str:
@@ -42,30 +43,29 @@ def push_data(payload: dict, max_retry: int, retry_interval: int):
         # 构建 URL
         query_string = build_query_string(payload)
         full_url = f"{API_URL}?{query_string}"
-        print(f"\033[93m推送到地址: {full_url}\033[0m")
+        log_with_timestamp(f"\033[93m推送到地址: {full_url}\033[0m")
 
         try:
             # TODO 好像服务器那边要求必须有一个 json 字段，不太清楚里面要填啥
             response = requests.post(full_url, json={})
-
-            print(f"\033[93m状态码: {response.status_code}\033[0m")
-            print(f"\033[93m响应内容: {response.text}\033[0m")  # 打印返回的原始内容
+            log_with_timestamp(f"\033[93m状态码: {response.status_code}\033[0m")
+            log_with_timestamp(f"\033[93m响应内容: {response.text}\033[0m")
 
             if response.status_code == 200:
-                print("\033[92m推送成功\033[0m")
+                log_with_timestamp("\033[92m推送成功\033[0m")
                 success = True
                 break
             else:
-                print(f"\033[91m推送失败，状态码: {response.status_code}, 内容: {response.text}\033[0m")
+                log_with_timestamp(f"\033[91m推送失败，状态码: {response.status_code}, 内容: {response.text}\033[0m")
         except requests.RequestException as e:
-            print(f"\033[91m请求异常: {e}\033[0m")
+            log_with_timestamp(f"\033[91m请求异常: {e}\033[0m")
 
         # 增加重试次数
         retry_count += 1
 
         if retry_count <= max_retry:
-            print(f"\033[93m重试 {retry_count}/{max_retry} 次，等待 {retry_interval} 秒...\033[0m")
+            log_with_timestamp(f"\033[93m重试 {retry_count}/{max_retry} 次，等待 {retry_interval} 秒...\033[0m")
             time.sleep(retry_interval)
 
     if not success:
-        print("\033[91m推送失败，达到最大重传次数。\033[0m")
+        log_with_timestamp("\033[91m推送失败，达到最大重传次数。\033[0m")

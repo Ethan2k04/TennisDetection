@@ -7,7 +7,7 @@ import threading
 from network import push_data
 from kernel import detect_balls, detect_target, is_target_result_valid, update_ball_status, draw_target_boxes, \
     draw_ball_boxes
-from tools import create_trackbar, save_target_to_config,  get_trackbar_reset_target_switch
+from tools import create_trackbar, save_target_to_config,  get_trackbar_reset_target_switch, log_with_timestamp
 from constants import CONFIG_FILE, SCORE_ORG, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS, FPS_SCALE, FPS_COLOR, \
     FPS_THICKNESS, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE, BALL_HIT_WAIT_SEC
 
@@ -31,12 +31,12 @@ class TargetManager:
             if is_target_result_valid(target_result, self.num_target):
                 self.target_data = self._parse_target_result(target_result)
                 save_target_to_config(self.target_data)
-                print(f"\033[92m[Valid] Target saved at {time.strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
+                log_with_timestamp(f"\033[92m[Valid] Target saved at {time.strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
                 self.is_target_set = True
             else:
                 self.target_data = self._parse_target_result(target_result)
                 save_target_to_config(self.target_data)
-                print(f"\033[93m[Invalid] No valid target detected. Retrying...\033[0m")
+                log_with_timestamp(f"\033[93m[Invalid] No valid target detected. Retrying...\033[0m")
                 self.is_target_set = False
             self.last_relocate_time = time.time()
 
@@ -89,7 +89,7 @@ class VideoProcessor:
         while True:
             ret, frame = self.cap.read()
             if not ret:
-                print("End of video or failed to grab frame")
+                log_with_timestamp("\033[93mEnd of video or failed to grab frame\033[0m")
                 break
 
             self.target_manager.relocate_target(frame, retarget_wait_sec=RETARGET_WAIT_SEC)
@@ -159,13 +159,20 @@ class VideoProcessor:
 # 主函数
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 main.py <video_path or image_path or 0 for stream>")
+        print("Usage: python3 main.py <video_path or image_path or 0 for stream> [output_path (optional)]")
         sys.exit(1)
 
     input_path = sys.argv[1]
+    output_path = None
+
+    if len(sys.argv) > 2:
+        output_path = sys.argv[2]
+
     if input_path.endswith(('.mp4', '.avi', '.mov')):
-        output_path = "result.mp4"
-        processor = VideoProcessor(input_source=input_path, output_path=output_path)
+        if output_path:
+            processor = VideoProcessor(input_source=input_path, output_path=output_path)
+        else:
+            processor = VideoProcessor(input_source=input_path)
         processor.process_stream()
     elif input_path.endswith(('.jpg', '.png', '.jpeg')):
         print("Image processing not implemented yet")
