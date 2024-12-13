@@ -61,20 +61,28 @@ class TargetManager:
 
 # 视频处理类
 class VideoProcessor:
-    def __init__(self, input_source=0):
+    def __init__(self, input_source=0, output_path=None):
         self.cap = cv2.VideoCapture(input_source)
         if not self.cap.isOpened():
             raise RuntimeError(f"Unable to access input source: {input_source}")
 
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
+        self.output_path = output_path
+
         self.target_manager = TargetManager()
         self.score_player = 0
         self.last_frame_time = time.time()
         self.ball_timestamps = {}
         self.ball_status = {}
         self.last_collision_time = time.time()
+
+        if self.output_path:
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            self.video_writer = cv2.VideoWriter(self.output_path, fourcc, self.fps, (self.frame_width, self.frame_height))
+        else:
+            self.video_writer = None
 
     def process_stream(self) -> None:
         create_trackbar()
@@ -86,6 +94,9 @@ class VideoProcessor:
 
             self.target_manager.relocate_target(frame, retarget_wait_sec=RETARGET_WAIT_SEC)
             frame = self._update_score(frame)
+
+            if self.video_writer:
+                self.video_writer.write(frame)
 
             self._display_frame(frame)
 
@@ -103,7 +114,7 @@ class VideoProcessor:
         for ball_id, ball in enumerate(ball_result):
             ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
             collision_detected, score, left_target = update_ball_status(ball_id, ball_center, config, self.ball_status)
-            
+
             if collision_detected and abs(time.time() - self.last_collision_time > BALL_HIT_WAIT_SEC):
                 self.last_collision_time = time.time()
                 self.score_player += score
@@ -138,6 +149,8 @@ class VideoProcessor:
 
     def _cleanup(self) -> None:
         self.cap.release()
+        if self.video_writer:
+            self.video_writer.release()
         cv2.destroyAllWindows()
 
 
@@ -149,7 +162,8 @@ def main():
 
     input_path = sys.argv[1]
     if input_path.endswith(('.mp4', '.avi', '.mov')):
-        processor = VideoProcessor(input_source=input_path)
+        output_path = "output_detected.mp4"
+        processor = VideoProcessor(input_source=input_path, output_path=output_path)
         processor.process_stream()
     elif input_path.endswith(('.jpg', '.png', '.jpeg')):
         print("Image processing not implemented yet")

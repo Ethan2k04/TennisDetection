@@ -1,11 +1,11 @@
 import cv2
 import numpy as np
-
 from constants import IMG_SIZE, OBJ_THRESH, NMS_THRESH
 
 
 def filter_boxes(boxes, box_confidences, box_class_probs):
-    """Filter boxes with object threshold.
+    """
+    Filter boxes with object threshold.
     """
     box_confidences = box_confidences.reshape(-1)
     candidate, class_num = box_class_probs.shape
@@ -13,16 +13,18 @@ def filter_boxes(boxes, box_confidences, box_class_probs):
     class_max_score = np.max(box_class_probs, axis=-1)
     classes = np.argmax(box_class_probs, axis=-1)
 
-    _class_pos = np.where(class_max_score* box_confidences >= OBJ_THRESH)
-    scores = (class_max_score* box_confidences)[_class_pos]
+    _class_pos = np.where(class_max_score * box_confidences >= OBJ_THRESH)
+    scores = (class_max_score * box_confidences)[_class_pos]
 
     boxes = boxes[_class_pos]
     classes = classes[_class_pos]
 
     return boxes, classes, scores
 
+
 def nms_boxes(boxes, scores):
-    """Suppress non-maximal boxes.
+    """
+    Suppress non-maximal boxes.
     # Returns
         keep: ndarray, index of effective boxes.
     """
@@ -54,17 +56,18 @@ def nms_boxes(boxes, scores):
     keep = np.array(keep)
     return keep
 
+
 def dfl(position):
     # Distribution Focal Loss (DFL)
     import torch
     x = torch.tensor(position, dtype=torch.float32)
-    n,c,h,w = x.shape
+    n, c, h, w = x.shape
     p_num = 4
-    mc = c//p_num
-    y = x.reshape(n,p_num,mc,h,w)
+    mc = c // p_num
+    y = x.reshape(n, p_num, mc, h, w)
     y = y.softmax(2)
-    acc_metrix = torch.tensor(range(mc)).float().reshape(1,1,mc,1,1)
-    y = (y*acc_metrix).sum(2)
+    acc_metrix = torch.tensor(range(mc)).float().reshape(1, 1, mc, 1, 1)
+    y = (y * acc_metrix).sum(2)
     return y.numpy()
 
 
@@ -74,28 +77,29 @@ def box_process(position):
     col = col.reshape(1, 1, grid_h, grid_w)
     row = row.reshape(1, 1, grid_h, grid_w)
     grid = np.concatenate((col, row), axis=1)
-    stride = np.array([IMG_SIZE[1]//grid_h, IMG_SIZE[0]//grid_w]).reshape(1,2,1,1)
+    stride = np.array([IMG_SIZE[1]//grid_h, IMG_SIZE[0]//grid_w]).reshape(1, 2, 1, 1)
 
     position = dfl(position)
-    box_xy  = grid +0.5 -position[:,0:2,:,:]
-    box_xy2 = grid +0.5 +position[:,2:4,:,:]
+    box_xy = grid + 0.5 - position[:, 0:2, :, :]
+    box_xy2 = grid + 0.5 + position[:, 2:4, :, :]
     xyxy = np.concatenate((box_xy*stride, box_xy2*stride), axis=1)
 
     return xyxy
 
+
 def post_process(input_data):
     boxes, scores, classes_conf = [], [], []
-    defualt_branch=3
-    pair_per_branch = len(input_data)//defualt_branch
+    default_branch = 3
+    pair_per_branch = len(input_data)//default_branch
     # Python 忽略 score_sum 输出
-    for i in range(defualt_branch):
+    for i in range(default_branch):
         boxes.append(box_process(input_data[pair_per_branch*i]))
         classes_conf.append(input_data[pair_per_branch*i+1])
-        scores.append(np.ones_like(input_data[pair_per_branch*i+1][:,:1,:,:], dtype=np.float32))
+        scores.append(np.ones_like(input_data[pair_per_branch*i+1][:, : 1, :, :], dtype=np.float32))
 
     def sp_flatten(_in):
         ch = _in.shape[1]
-        _in = _in.transpose(0,2,3,1)
+        _in = _in.transpose(0, 2, 3, 1)
         return _in.reshape(-1, ch)
 
     boxes = [sp_flatten(_v) for _v in boxes]
@@ -131,7 +135,6 @@ def post_process(input_data):
     scores = np.concatenate(nscores)
 
     return boxes, classes, scores
-
 
 
 def draw(image, boxes, scores, classes, CLASSES):

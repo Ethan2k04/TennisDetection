@@ -24,6 +24,7 @@ RETARGET_WAIT_SEC = 3
 # 等待多少秒判断碰撞
 BALL_HIT_WAIT_SEC = 3
 
+# 判断是否为碰撞的直线拟合阈值
 NONLINEAR_THRESHOLD = 30000
 
 # 黑色的HSV范围
@@ -56,17 +57,13 @@ TEXT_MARGIN = 10
 # 分数文字的粗细
 SCORE_THICKNESS = 3
 SCORE_SCALE = 1
+SCORE_COLOR = (0, 255, 255)
+SCORE_ORG = (30, 50)
 
+# 帧率文字的粗细
 FPS_THICKNESS = 3
 FPS_SCALE = 1
-
-# 分数文字的颜色
-SCORE_COLOR = (0, 255, 255)
-
 FPS_COLOR = (0, 255, 0)
-
-# 分数文字的位置
-SCORE_ORG = (30, 50)
 
 # 判断椭圆最少的多边形边数
 MIN_POLY = 5
@@ -80,6 +77,9 @@ BALL_CONF = 0.05
 # 标靶置信度
 TARGET_CONF = 0.5
 
+# 过滤小面积靶标识别结果（占最大识别结果的百分比）
+AREA_THRESHOLD_PERCENTAGE = 10
+
 # 模型相关参数
 OBJ_THRESH = 0.10
 NMS_THRESH = 0.45
@@ -91,5 +91,3 @@ TENNIS_CLASSES = ("ball")
 TENNIS_ID_LIST = [1]
 TARGET_CLASSES = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
 TARGET_ID_LIST = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-
-AREA_THRESHOLD_PERCENTAGE = 10

@@ -1,18 +1,8 @@
 import cv2
 import json
-
-from constants import *
-
-
-def refine_mask(mask, ksize):
-    """
-    对输入的图像进行形态学操作
-    """
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ksize, ksize))  # 调整核大小
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)  # 闭运算
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)  # 去噪点
-
-    return mask
+import numpy as np
+from constants import CONFIG_FILE, UPPER_BLACK, LOWER_WHITE, BALL_CONF, TARGET_CONF, BALL_HIT_WAIT_SEC, \
+                      RETARGET_WAIT_SEC, REFINE_KSIZE, ERODE_KSIZE, ERODE_ITER
 
 
 # 定义保存目标框信息的函数
@@ -29,14 +19,11 @@ def save_target_to_config(target_data):
 
 
 # 创建滑块更新 V 范围
-def nothing(x):
-    pass
-
-
 def create_trackbar():
+    def nothing(x):
+        pass
     # 创建一个窗口，便于添加滑块
     cv2.namedWindow("Trackbars", cv2.WINDOW_NORMAL)
-
     cv2.createTrackbar("UP_V_BLACK", "Trackbars", UPPER_BLACK[2], 255, nothing)
     cv2.createTrackbar("LOW_V_WHITE", "Trackbars", LOWER_WHITE[2], 255, nothing)
     cv2.createTrackbar("BALL_CONF", "Trackbars", int(BALL_CONF * 100), 100, nothing)
@@ -74,12 +61,14 @@ def get_trackbar_values_wait_sec():
 
     return float(ball_hit / 100), float(retarget)
 
+
 def get_trackbar_values_morphology():
     refine_ksize = cv2.getTrackbarPos("REFINE_KSIZE", "Trackbars")
     erode_ksize = cv2.getTrackbarPos("ERODE_KSIZE", "Trackbars")
     erode_iter = cv2.getTrackbarPos("ERODE_ITER", "Trackbars")
 
     return max(refine_ksize, 1), erode_ksize, erode_iter
+
 
 def get_trackbar_reset_target_switch():
     # Get the value of the "RESET_TARGET_SWITCH" trackbar

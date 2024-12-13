@@ -1,8 +1,7 @@
 import requests
 import hashlib
 import time
-
-from constants import *
+from constants import SALT, API_URL
 
 
 def generate_sign(data: dict, salt: str) -> str:
@@ -25,7 +24,7 @@ def build_query_string(data: dict) -> str:
 def push_data(payload: dict, max_retry: int, retry_interval: int):
     """
     推送标注数据到小程序接口。
-    自动添加当前时间戳到 payload。
+    自动添加当前时间戳、重传次数和盐值到 payload。
     """
     retry_count = 0
     success = False
@@ -46,6 +45,7 @@ def push_data(payload: dict, max_retry: int, retry_interval: int):
         print(f"推送到地址: {full_url}")
 
         try:
+            # TODO 好像服务器那边要求必须有一个 json 字段，不太清楚里面要填啥
             response = requests.post(full_url, json={})
 
             print(f"状态码: {response.status_code}")

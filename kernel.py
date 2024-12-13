@@ -1,23 +1,25 @@
 import os
 import json
-import torch
-
+import cv2
+import numpy as np
 from sklearn.cluster import KMeans
-from constants import *
-from yolo11 import *
+from yolo11 import setup_model, post_process
 from py_utils.coco_utils import COCO_test_helper
-from tools import refine_mask, get_trackbar_values_filter, get_trackbar_values_confidence, \
+from tools import get_trackbar_values_filter, get_trackbar_values_confidence, \
     get_trackbar_values_morphology
+from constants import TENNIS_MODEL_PATH, TARGET_MODEL_PATH, BALL_COLOR, LINE_THICKNESS, FONT_SCALE, LOWER_BLACK, \
+                       UPPER_WHITE, RANDOM_STATE, MIN_POLY, AREA_THRESHOLD_PERCENTAGE, PERI_BIAS, SETTINGS_FILE, \
+                       TARGET_COLOR, NONLINEAR_THRESHOLD, IMG_SIZE
 
 
 # yolo11 模型初始化
-device = '0' if torch.cuda.is_available() else 'cpu'
 model_tennis = setup_model(TENNIS_MODEL_PATH)
 model_digit = setup_model(TARGET_MODEL_PATH)
 co_helper = COCO_test_helper(enable_letter_box=True)
 
+# 用于过滤小面积噪音
+area_threshold = 0
 
-area_threshhold = 0
 
 # 使用yolo11检测网球
 def detect_balls(frame):
@@ -195,8 +197,8 @@ def detect_target(frame):
 
     # 遍历椭圆轮廓并进行 YOLO 检测
     for contour in ellipses:
-        global area_threshhold
-        if cv2.contourArea(contour) > area_threshhold:
+        global area_threshold
+        if cv2.contourArea(contour) > area_threshold:
             # 获取轮廓的边界框
             x, y, w, h = cv2.boundingRect(contour)
             cropped_region = frame[y: y + h, x: x + w]  # 截取对应的区域
@@ -217,7 +219,7 @@ def detect_target(frame):
     # 计算所有有效椭圆的面积并排序
     area_list = sorted([cv2.contourArea(contour) for contour in valid_ellipses])
     if len(area_list) > 0:
-        area_threshhold = max(area_list) / AREA_THRESHOLD_PERCENTAGE
+        area_threshold = max(area_list) / AREA_THRESHOLD_PERCENTAGE
     # print(f"valid_ellipses: {len(valid_ellipses)}")   # 调试用
 
     # 识别的标靶结果
@@ -328,12 +330,26 @@ def update_ball_status(ball_id, ball_center, config, ball_status):
     return False, 0, False
 
 
+# 对输入的 mask 进行形态学优化操作
+def refine_mask(mask, ksize):
+    """
+    对输入的图像进行形态学操作
+    """
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ksize, ksize))  # 调整核大小
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)  # 闭运算
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)  # 去噪点
+
+    return mask
+
+
+# 判断目标结果集合是否符合设定
 def is_target_result_valid(target_result, num_target):
     total_length = sum(len(v) for k, v in target_result.items() if k != "undef")
     return total_length == num_target and all(
         len(v) > 0 for k, v in target_result.items() if k != "undef")
 
 
+# 释放资源
 def destruct():
     model_tennis.release()
     model_digit.release()
