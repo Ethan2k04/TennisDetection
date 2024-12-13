@@ -1,4 +1,5 @@
 import cv2
+import torch
 import numpy as np
 from constants import IMG_SIZE, OBJ_THRESH, NMS_THRESH
 
@@ -59,7 +60,6 @@ def nms_boxes(boxes, scores):
 
 def dfl(position):
     # Distribution Focal Loss (DFL)
-    import torch
     x = torch.tensor(position, dtype=torch.float32)
     n, c, h, w = x.shape
     p_num = 4
