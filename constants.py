@@ -83,7 +83,7 @@ TARGET_CONF = 0.5
 # 模型相关参数
 OBJ_THRESH = 0.10
 NMS_THRESH = 0.45
-TENNIS_MODEL_PATH = "model/best-tennis-s.rknn"
+TENNIS_MODEL_PATH = "model/best-tennis-s-relu.rknn"
 TARGET_MODEL_PATH = "model/best-digit-n.rknn"
 MODEL_IMGSIZE = 320
 IMG_SIZE = (640, 640)

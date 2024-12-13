@@ -1,5 +1,7 @@
 __pycache__
 
+/py_utils/__pycache__
+
 /test_data/
 
 /.idea/

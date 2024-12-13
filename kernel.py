@@ -179,7 +179,7 @@ def detect_target(frame):
 
     # =================================================== #
     # cv2.imwrite("target_mask.png", mask)  # 调试用
-    # cv2.imshow("target_mask", mask)       # 调试用
+    cv2.imshow("target_mask", mask)       # 调试用
     # cv2.moveWindow("target_mask", CENTER_X, CENTER_Y)
     # =================================================== #
 
