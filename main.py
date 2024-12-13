@@ -31,12 +31,12 @@ class TargetManager:
             if is_target_result_valid(target_result, self.num_target):
                 self.target_data = self._parse_target_result(target_result)
                 save_target_to_config(self.target_data)
-                print(f"[Valid] Target saved at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"\033[92m[Valid] Target saved at {time.strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
                 self.is_target_set = True
             else:
                 self.target_data = self._parse_target_result(target_result)
                 save_target_to_config(self.target_data)
-                print(f"[Invalid] No valid target detected. Retrying...")
+                print(f"\033[93m[Invalid] No valid target detected. Retrying...\033[0m")
                 self.is_target_set = False
             self.last_relocate_time = time.time()
 
@@ -95,10 +95,10 @@ class VideoProcessor:
             self.target_manager.relocate_target(frame, retarget_wait_sec=RETARGET_WAIT_SEC)
             frame = self._update_score(frame)
 
+            frame = self._display_frame(frame)
+
             if self.video_writer:
                 self.video_writer.write(frame)
-
-            self._display_frame(frame)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -118,18 +118,18 @@ class VideoProcessor:
             if collision_detected and abs(time.time() - self.last_collision_time > BALL_HIT_WAIT_SEC):
                 self.last_collision_time = time.time()
                 self.score_player += score
-                score_data = {
-                    "x": ball_center[0],
-                    "y": ball_center[1],
-                    "score": score
-                }
-
-                # 推送得分数据
-                push_thread = threading.Thread(
-                    target=push_data,
-                    args=(score_data, MAX_RETRY, RETRY_INTERVAL)
-                )
-                push_thread.start()
+                if score != 0:
+                    score_data = {
+                        "x": ball_center[0],
+                        "y": ball_center[1],
+                        "score": score
+                    }
+                    # 推送得分数据
+                    push_thread = threading.Thread(
+                        target=push_data,
+                        args=(score_data, MAX_RETRY, RETRY_INTERVAL)
+                    )
+                    push_thread.start()
 
             # 删除离开标靶区域且不需要追踪的球
             if left_target:
@@ -137,7 +137,7 @@ class VideoProcessor:
 
         return frame
 
-    def _display_frame(self, frame) -> None:
+    def _display_frame(self, frame) -> cv2.Mat:
         current_time = time.time()
         frame_rate = round(1 / (current_time - self.last_frame_time))
         self.last_frame_time = current_time
@@ -146,6 +146,8 @@ class VideoProcessor:
         cv2.putText(frame, f"FPS: {frame_rate}", (self.frame_width - 160, 30), cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE,
                     FPS_COLOR, FPS_THICKNESS)
         cv2.imshow("Video Detection", frame)
+
+        return frame
 
     def _cleanup(self) -> None:
         self.cap.release()
@@ -162,7 +164,7 @@ def main():
 
     input_path = sys.argv[1]
     if input_path.endswith(('.mp4', '.avi', '.mov')):
-        output_path = "output_detected.mp4"
+        output_path = "result.mp4"
         processor = VideoProcessor(input_source=input_path, output_path=output_path)
         processor.process_stream()
     elif input_path.endswith(('.jpg', '.png', '.jpeg')):

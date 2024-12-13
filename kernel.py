@@ -322,7 +322,7 @@ def update_ball_status(ball_id, ball_center, config, ball_status):
 
         # 碰撞判断：残差大于阈值
         collision_detected = residuals > NONLINEAR_THRESHOLD  # 根据实际场景调整阈值
-        print(f"\n res:{residuals}\n")
+        # print(f"residual: {residuals}\n")
         return collision_detected, status["last_target_score"], True
 
     # 更新状态
