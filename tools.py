@@ -23,6 +23,8 @@ def save_target_to_config(target_data):
     with open(CONFIG_FILE, 'w') as file:
         json.dump(config, file, indent=4)
 
+    return config
+
 
 # 创建滑块更新 V 范围
 def create_trackbar():
