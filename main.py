@@ -113,12 +113,12 @@ class VideoProcessor:
 
         for ball_id, ball in enumerate(ball_result):
             ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
-            collision_detected, score, left_target = update_ball_status(ball_id, ball_center, config, self.ball_status)
+            collision_detected, score, left_target = update_ball_status(ball_id, ball_center, config, self.ball_status, frame)
 
             if collision_detected and abs(time.time() - self.last_collision_time > BALL_HIT_WAIT_SEC):
-                self.last_collision_time = time.time()
-                self.score_player += score
                 if score != 0:
+                    self.last_collision_time = time.time()
+                    self.score_player += score
                     score_data = {
                         "x": ball_center[0],
                         "y": ball_center[1],

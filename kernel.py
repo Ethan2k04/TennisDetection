@@ -280,7 +280,7 @@ def draw_target_boxes(frame, config):
 
 
 # 根据网球踪迹拟合直线并判断是否碰撞
-def update_ball_status(ball_id, ball_center, config, ball_status):
+def update_ball_status(ball_id, ball_center, config, ball_status, frame):
     """
     更新网球状态并判断是否发生碰撞。
     :param ball_id: 当前网球的唯一标识
@@ -297,7 +297,6 @@ def update_ball_status(ball_id, ball_center, config, ball_status):
         }
 
     status = ball_status[ball_id]
-    status["trajectory"].append(ball_center)
 
     # 检测是否在靶子区域内
     in_target = False
@@ -308,6 +307,7 @@ def update_ball_status(ball_id, ball_center, config, ball_status):
 
         if (target_center[0] - target_width // 2 <= ball_center[0] <= target_center[0] + target_width // 2) and \
                 (target_center[1] - target_height // 2 <= ball_center[1] <= target_center[1] + target_height // 2):
+            status["trajectory"].append(ball_center)
             in_target = True
             status["last_target_score"] = 0 if value["cls"] == "undef" else int(value["cls"])  # 记录靶子分数
             break
@@ -317,12 +317,21 @@ def update_ball_status(ball_id, ball_center, config, ball_status):
         trajectory = np.array(status["trajectory"])
         x = trajectory[:, 0]
         y = trajectory[:, 1]
-        coeffs = np.polyfit(x, y, 1)
-        residuals = np.sum((np.polyval(coeffs, x) - y) ** 2)
+        print(f"sample num: {len(x)}")
+        for xi, yi in zip(x, y):
+            cv2.circle(frame, (xi, yi), radius=5, color=(0, 255, 0), thickness=-1)  # Green dots
+        coeffs_1 = np.polyfit(x, y, 1)
+        residuals_1 = np.sum((np.polyval(coeffs_1, x) - y) ** 2) / len(x)
+        coeffs_2 = np.polyfit(x, y, 2)
+        residuals_2 = np.sum((np.polyval(coeffs_2, x) - y) ** 2) / len(x)
 
         # 碰撞判断：残差大于阈值
-        collision_detected = residuals > NONLINEAR_THRESHOLD  # 根据实际场景调整阈值
-        # print(f"residual: {residuals}\n")
+        if len(x) > 10:
+            collision_detected = residuals_1 > 100 and residuals_2 > 100  # 根据实际场景调整阈值
+        else:
+            collision_detected = residuals_1 > 100
+        sc = status["last_target_score"]
+        print(f"residual_1: {residuals_1}, residual_2: {residuals_2}, score:{sc}\n")
         return collision_detected, status["last_target_score"], True
 
     # 更新状态

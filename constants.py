@@ -25,7 +25,7 @@ RETARGET_WAIT_SEC = 3
 BALL_HIT_WAIT_SEC = 3
 
 # 判断是否为碰撞的直线拟合阈值
-NONLINEAR_THRESHOLD = 30000
+NONLINEAR_THRESHOLD = 100
 
 # 黑色的HSV范围
 LOWER_BLACK = np.array([0, 0, 0])
@@ -84,7 +84,7 @@ AREA_THRESHOLD_PERCENTAGE = 10
 OBJ_THRESH = 0.10
 NMS_THRESH = 0.45
 TENNIS_MODEL_PATH = "model/best-tennis-s-relu.rknn"
-TARGET_MODEL_PATH = "model/best-digit-n.rknn"
+TARGET_MODEL_PATH = "model/best-digit-s-relu.rknn"
 MODEL_IMGSIZE = 320
 IMG_SIZE = (640, 640)
 TENNIS_CLASSES = ("ball")
