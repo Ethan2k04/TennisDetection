@@ -279,14 +279,20 @@ def draw_target_boxes(frame, config):
     return frame
 
 
+import time
+import numpy as np
+import cv2
+
 # 根据网球踪迹拟合直线并判断是否碰撞
-def update_ball_status(ball_id, ball_center, config, ball_status, frame):
+def update_ball_status(ball_id, ball_center, config, ball_status, frame, last_detection_time):
     """
     更新网球状态并判断是否发生碰撞。
     :param ball_id: 当前网球的唯一标识
     :param ball_center: 网球中心点坐标 (x, y)
     :param config: 靶子区域配置
     :param ball_status: 字典，记录每个网球的状态和轨迹
+    :param frame: 当前帧图像
+    :param last_detection_time: 上次识别网球的时间
     :return: (是否发生碰撞, 得分, 是否离开靶子区域)
     """
     if ball_id not in ball_status:
@@ -294,9 +300,11 @@ def update_ball_status(ball_id, ball_center, config, ball_status, frame):
             "in_target": False,
             "trajectory": [],
             "last_target_score": 0,  # 记录最后在的靶子分数
+            "last_detection_time": time.time(),  # 记录上次检测时间
         }
 
     status = ball_status[ball_id]
+    current_time = time.time()
 
     # 检测是否在靶子区域内
     in_target = False
@@ -307,35 +315,43 @@ def update_ball_status(ball_id, ball_center, config, ball_status, frame):
 
         if (target_center[0] - target_width // 2 <= ball_center[0] <= target_center[0] + target_width // 2) and \
                 (target_center[1] - target_height // 2 <= ball_center[1] <= target_center[1] + target_height // 2):
-            status["trajectory"].append(ball_center)
             in_target = True
+            status["trajectory"].append(ball_center)
+            status["last_detection_time"] = current_time
             status["last_target_score"] = 0 if value["cls"] == "undef" else int(value["cls"])  # 记录靶子分数
             break
 
-    # 从进入靶子到离开靶子时，进行碰撞判断
-    if status["in_target"] and not in_target:
-        trajectory = np.array(status["trajectory"])
-        x = trajectory[:, 0]
-        y = trajectory[:, 1]
-        print(f"sample num: {len(x)}")
-        for xi, yi in zip(x, y):
-            cv2.circle(frame, (xi, yi), radius=5, color=(0, 255, 0), thickness=-1)  # Green dots
-        coeffs_1 = np.polyfit(x, y, 1)
-        residuals_1 = np.sum((np.polyval(coeffs_1, x) - y) ** 2) / len(x)
-        coeffs_2 = np.polyfit(x, y, 2)
-        residuals_2 = np.sum((np.polyval(coeffs_2, x) - y) ** 2) / len(x)
+    # 当没有网球在靶子内时，等待1秒钟
+    if not in_target:
+        if current_time - status["last_detection_time"] > 1:  # 1秒没有网球时进行结算
+            trajectory = np.array(status["trajectory"])
+            if len(trajectory) > 0:
+                x = trajectory[:, 0]
+                y = trajectory[:, 1]
+                print(f"sample num: {len(x)}")
+                for xi, yi in zip(x, y):
+                    cv2.circle(frame, (xi, yi), radius=5, color=(0, 255, 0), thickness=-1)  # Green dots
+                coeffs_1 = np.polyfit(x, y, 1)
+                residuals_1 = np.sum((np.polyval(coeffs_1, x) - y) ** 2) / len(x)
+                coeffs_2 = np.polyfit(x, y, 2)
+                residuals_2 = np.sum((np.polyval(coeffs_2, x) - y) ** 2) / len(x)
 
-        # 碰撞判断：残差大于阈值
-        if len(x) > 10:
-            collision_detected = residuals_1 > 100 and residuals_2 > 100  # 根据实际场景调整阈值
-        else:
-            collision_detected = residuals_1 > 100
-        sc = status["last_target_score"]
-        print(f"residual_1: {residuals_1}, residual_2: {residuals_2}, score:{sc}\n")
-        return collision_detected, status["last_target_score"], True
+                # 碰撞判断：残差大于阈值
+                collision_detected = False
+                if len(x) > 10:
+                    if residuals_1 > 100 and residuals_2 > 100:  # 根据实际场景调整阈值
+                        collision_detected = True
+                
+                sc = status["last_target_score"]
+                print(f"residual_1: {residuals_1}, residual_2: {residuals_2}, score:{sc}\n")
+                # 结算后清除轨迹记录
+                status["trajectory"] = []
+                return collision_detected, sc, True  # 碰撞检测，返回得分和离开靶子区域标识
 
     # 更新状态
     status["in_target"] = in_target
+    status["last_detection_time"] = current_time  # 更新检测时间
+
     return False, 0, False
 
 
