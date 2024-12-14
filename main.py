@@ -7,7 +7,7 @@ import threading
 from typing import Any
 from network import push_data
 from kernel import detect_balls, detect_target, is_target_result_valid, build_target_status, update_target_status, \
-    draw_target_boxes, draw_ball_boxes
+    draw_target_boxes, draw_ball_boxes, check_target_status
 from tools import create_trackbar, save_target_to_config,  get_trackbar_reset_target_switch, log_with_timestamp
 from constants import CONFIG_FILE, SCORE_ORG, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS, FPS_SCALE, FPS_COLOR, \
     FPS_THICKNESS, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE, BALL_HIT_WAIT_SEC
@@ -118,25 +118,27 @@ class VideoProcessor:
         frame = draw_ball_boxes(frame, ball_result)
         frame = draw_target_boxes(frame, config)
 
-        if self.target_status is not None:
+        if len(self.target_status.keys()) > 0:
             for ball_id, ball in enumerate(ball_result):
                 ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
-                collision_detected, score = update_target_status(self.target_status, ball_center, frame)
-                if collision_detected and abs(time.time() - self.last_collision_time > BALL_HIT_WAIT_SEC):
-                    if score != 0:
-                        self.last_collision_time = time.time()
-                        self.score_player += score
-                        score_data = {
-                            "x": ball_center[0],
-                            "y": ball_center[1],
-                            "score": score
-                        }
-                        # 推送得分数据
-                        push_thread = threading.Thread(
-                            target=push_data,
-                            args=(score_data, MAX_RETRY, RETRY_INTERVAL)
-                        )
-                        push_thread.start()
+                update_target_status(self.target_status, ball_center)
+
+            collision_detected, score = check_target_status(self.target_status, frame)
+            if collision_detected and abs(time.time() - self.last_collision_time > BALL_HIT_WAIT_SEC):
+                if score != 0:
+                    self.last_collision_time = time.time()
+                    self.score_player += score
+                    score_data = {
+                        "x": ball_center[0],
+                        "y": ball_center[1],
+                        "score": score
+                    }
+                    # 推送得分数据
+                    push_thread = threading.Thread(
+                        target=push_data,
+                        args=(score_data, MAX_RETRY, RETRY_INTERVAL)
+                    )
+                    push_thread.start()
 
         return frame
 

@@ -302,24 +302,33 @@ def build_target_status(config):
 
 
 # 更新靶标内网球识别状态
-def update_target_status(target_status, ball_center, frame):
-    for key, value in target_status:
-        target_center = (int(value["center_x"]), int(value["center_y"]))
-        target_width = int(value["minor_axis"])
-        target_height = int(value["major_axis"])
+def update_target_status(target_status, ball_center):
+    for key, value in target_status.items():
+        status = target_status[key]
+        target_center = status["center"]
+        target_width = status["width"]
+        target_height = status["height"]
         if (target_center[0] - target_width // 2 <= ball_center[0] <= target_center[0] + target_width // 2) and \
                 (target_center[1] - target_height // 2 <= ball_center[1] <= target_center[1] + target_height // 2):
-            target_status[key]["last_update_time"] = time.time()
-            target_status[key]["trajectory"].apeend(ball_center)
-            target_status[key]["has_ball"] = True
-        if value["last_update_time"] - time.time() > 1 and value["has_ball"]:
-            is_collided = trajectory_fitting(value["trajectory"], frame)
-            target_status[key]["trajectory"] = []
-            target_status[key]["has_ball"] = False
-            if is_collided:
-                return True, value["score"]
+            # print(f"ball detected in target_{key}")
+            status["last_update_time"] = time.time()
+            status["trajectory"].append(ball_center)
+            status["has_ball"] = True
+
+
+def check_target_status(target_status, frame):
+    for key, value in target_status.items():
+        status = target_status[key]
+        if time.time() - status["last_update_time"] > 1 and status["has_ball"]:
+                # print(f"target_id: {key} checked")
+                is_collided = trajectory_fitting(np.array(status["trajectory"]), frame)
+                status["trajectory"] = []
+                status["has_ball"] = False
+                if is_collided:
+                    return True, value["score"]
 
     return False, 0
+
 
 
 # 根据网球踪迹拟合直线并判断是否碰撞
@@ -333,9 +342,11 @@ def trajectory_fitting(trajectory, frame):
         residuals_1 = np.sum((np.polyval(coeffs_1, x) - y) ** 2) / len(x)
         coeffs_2 = np.polyfit(x, y, 2)
         residuals_2 = np.sum((np.polyval(coeffs_2, x) - y) ** 2) / len(x)
+        mul_residual = residuals_1 * residuals_2
 
         # 碰撞判断：残差大于阈值
-        if residuals_1 > 100 and residuals_2 > 100:  # 根据实际场景调整阈值
+        # print(f"res_1: {residuals_1}, res_2: {residuals_2}, mul: {mul_residual}")
+        if mul_residual > NONLINEAR_THRESHOLD:  # 根据实际场景调整阈值
             return True
 
     return False
