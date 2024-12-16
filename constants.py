@@ -45,7 +45,7 @@ RANDOM_STATE = 42
 
 # 框线和文字的粗细
 LINE_THICKNESS = 5
-FONT_SCALE = 0.8
+FONT_SCALE = 1
 
 # 框线和文字颜色
 BALL_COLOR = (0, 255, 0)

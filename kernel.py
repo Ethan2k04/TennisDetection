@@ -271,7 +271,7 @@ def draw_target_boxes(frame, config):
         y = int(value["center_y"])
         major_axis = int(value["major_axis"])
         minor_axis = int(value["minor_axis"])
-        label = "Target_" + str(cls)
+        label = "Target_" + str(key)
         text_position = (x + int(minor_axis / 2) + 10, y - int(major_axis / 2))
         cv2.rectangle(frame, (x - int(minor_axis / 2), y - int(major_axis / 2)),
                       (x + int(minor_axis / 2), y + int(major_axis / 2)), TARGET_COLOR, LINE_THICKNESS)
@@ -325,9 +325,9 @@ def check_target_status(target_status, frame):
                 status["trajectory"] = []
                 status["has_ball"] = False
                 if is_collided:
-                    return True, value["score"]
+                    return True, value["score"], key
 
-    return False, 0
+    return False, 0, None
 
 
 

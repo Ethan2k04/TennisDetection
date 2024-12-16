@@ -45,21 +45,46 @@ class TargetManager:
 
     @staticmethod
     def _parse_target_result(target_result: dict) -> dict:
-        target_data = {}
+        target_data = []
         target_id = 0
+
+        # Collect all target details into a list with a computed score
         for score, contours in target_result.items():
             for contour in contours:
                 (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
-                target_data[f"{target_id}"] = {
+                weight_y = 10  # Give y a higher weight
+                weight_x = 1    # Give x a lower weight
+                score_value = weight_y * y + weight_x * x  # Compute score
+                target_data.append({
+                    "id": target_id,
                     "cls": score,
                     "center_x": x,
                     "center_y": y,
                     "major_axis": major_axis,
                     "minor_axis": minor_axis,
                     "angle": angle,
-                }
+                    "score_value": score_value,
+                })
                 target_id += 1
-        return target_data
+
+        # Sort the target data by score_value
+        target_data.sort(key=lambda item: item["score_value"])
+
+        # Reformat into the desired dictionary structure
+        sorted_target_data = {
+            str(idx + 1): {
+                "cls": target["cls"],
+                "center_x": target["center_x"],
+                "center_y": target["center_y"],
+                "major_axis": target["major_axis"],
+                "minor_axis": target["minor_axis"],
+                "angle": target["angle"],
+            }
+            for idx, target in enumerate(target_data)
+        }
+
+        return sorted_target_data
+
 
 
 # 视频处理类
@@ -123,7 +148,7 @@ class VideoProcessor:
                 ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
                 update_target_status(self.target_status, ball_center)
 
-            collision_detected, score = check_target_status(self.target_status, frame)
+            collision_detected, score, idx = check_target_status(self.target_status, frame)
             if collision_detected and abs(time.time() - self.last_collision_time > BALL_HIT_WAIT_SEC):
                 if score != 0:
                     self.last_collision_time = time.time()
@@ -131,7 +156,8 @@ class VideoProcessor:
                     score_data = {
                         "x": ball_center[0],
                         "y": ball_center[1],
-                        "score": score
+                        "score": score,
+                        "device_id": idx
                     }
                     # 推送得分数据
                     push_thread = threading.Thread(
