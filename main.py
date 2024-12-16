@@ -162,8 +162,8 @@ class VideoProcessor:
                         "x": ball_center[0],
                         "y": ball_center[1],
                         "score": score,
-                        "target_id": idx,
-                        "device_id": mac_address
+                        # "target_id": idx,
+                        # "device_id": mac_address
                     }
                     # 推送得分数据
                     push_thread = threading.Thread(

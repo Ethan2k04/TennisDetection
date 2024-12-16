@@ -4,7 +4,6 @@ import time
 from constants import SALT, API_URL
 from tools import log_with_timestamp
 
-
 def generate_sign(data: dict, salt: str) -> str:
     """
     生成 sign 值，方法是将参数排序后拼接，加上盐值并计算 MD5 值。
@@ -14,18 +13,11 @@ def generate_sign(data: dict, salt: str) -> str:
     sign_string += f"&salt={salt}"
     return hashlib.md5(sign_string.encode('utf-8')).hexdigest()
 
-
-def build_query_string(data: dict) -> str:
-    """
-    根据数据构建查询字符串。
-    """
-    return "&".join(f"{key}={value}" for key, value in data.items())
-
-
 def push_data(payload: dict, max_retry: int, retry_interval: int):
     """
     推送标注数据到小程序接口。
-    自动添加当前时间戳、重传次数和盐值到 payload。
+    自动添加当前时间戳、重传次数和盐值到 payload，
+    并通过 POST 请求将数据作为 JSON 发送。
     """
     retry_count = 0
     success = False
@@ -40,14 +32,13 @@ def push_data(payload: dict, max_retry: int, retry_interval: int):
         # 生成 sign 值并添加到 payload 中
         payload['sign'] = generate_sign(payload, SALT)
 
-        # 构建 URL
-        query_string = build_query_string(payload)
-        full_url = f"{API_URL}?{query_string}"
-        log_with_timestamp(f"\033[93m推送到地址: {full_url}\033[0m")
+        # 打印推送地址（仅供调试）
+        log_with_timestamp(f"\033[93m推送到地址: {API_URL}\033[0m")
 
         try:
-            # TODO 好像服务器那边要求必须有一个 json 字段，不太清楚里面要填啥
-            response = requests.post(full_url, json={})
+            print(payload)
+            # 使用 POST 方法发送 JSON 数据
+            response = requests.post(API_URL, json=payload)
             log_with_timestamp(f"\033[93m状态码: {response.status_code}\033[0m")
             log_with_timestamp(f"\033[93m响应内容: {response.text}\033[0m")
 
@@ -58,14 +49,17 @@ def push_data(payload: dict, max_retry: int, retry_interval: int):
             else:
                 log_with_timestamp(f"\033[91m推送失败，状态码: {response.status_code}, 内容: {response.text}\033[0m")
         except requests.RequestException as e:
+            # 捕获请求异常并记录日志
             log_with_timestamp(f"\033[91m请求异常: {e}\033[0m")
 
         # 增加重试次数
         retry_count += 1
 
         if retry_count <= max_retry:
+            # 如果未达到最大重试次数，等待指定时间后重试
             log_with_timestamp(f"\033[93m重试 {retry_count}/{max_retry} 次，等待 {retry_interval} 秒...\033[0m")
             time.sleep(retry_interval)
 
     if not success:
+        # 如果达到最大重试次数仍失败，记录日志
         log_with_timestamp("\033[91m推送失败，达到最大重传次数。\033[0m")
