@@ -4,6 +4,11 @@ import json
 import cv2
 import os
 import threading
+import uuid
+# Get the MAC address
+mac = uuid.getnode()
+# Convert it to a readable format
+mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8))
 from typing import Any
 from network import push_data
 from kernel import detect_balls, detect_target, is_target_result_valid, build_target_status, update_target_status, \
@@ -157,7 +162,8 @@ class VideoProcessor:
                         "x": ball_center[0],
                         "y": ball_center[1],
                         "score": score,
-                        "device_id": idx
+                        "target_id": idx,
+                        "device_id": mac_address
                     }
                     # 推送得分数据
                     push_thread = threading.Thread(
