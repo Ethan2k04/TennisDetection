@@ -319,6 +319,7 @@ def update_target_status(target_status, ball_center):
             status["has_ball"] = True
 
 
+# 对每个靶标内的网球轨迹状态进行更新
 def check_target_status(target_status, frame):
     for key, value in target_status.items():
         status = target_status[key]
@@ -335,23 +336,57 @@ def check_target_status(target_status, frame):
     return False, 0, None
 
 
+# 计算点与点之间的欧几里得距离
+def calculate_distance(p1, p2):
+    return np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
+
 
 # 根据网球踪迹拟合直线并判断是否碰撞
-def trajectory_fitting(trajectory, frame):
-    if len(trajectory) > 0:
+def trajectory_fitting(trajectory, frame, threshold_angle=30, distance_ratio_threshold=1.5):
+    if len(trajectory) > 2:  # 确保有足够的点进行计算
         x = trajectory[:, 0]
         y = trajectory[:, 1]
-        for xi, yi in zip(x, y):
-            cv2.circle(frame, (xi, yi), radius=10, color=(0, 255, 0), thickness=-1)  # Green dots
-        coeffs_1 = np.polyfit(x, y, 1)
-        residuals_1 = np.sum((np.polyval(coeffs_1, x) - y) ** 2) / len(x)
-        coeffs_2 = np.polyfit(x, y, 2)
-        residuals_2 = np.sum((np.polyval(coeffs_2, x) - y) ** 2) / len(x)
-        # print(f"len: {len(x)}, res1: {residuals_1}. res2: {residuals_2}")
 
-        # 碰撞判断：残差大于阈值
-        if residuals_1 > 300 and residuals_2 > 15:
-            return True
+        # 绘制轨迹点
+        for xi, yi in zip(x, y):
+            cv2.circle(frame, (xi, yi), radius=10, color=(0, 255, 0), thickness=-1)  # 绿色圆点
+
+        # 计算速度方向变化的突变点
+        velocity_change_points = []
+        for i in range(1, len(trajectory) - 1):
+            # 计算前后两个速度向量的方向
+            v1 = np.array([x[i] - x[i-1], y[i] - y[i-1]])  # 当前点的速度向量
+            v2 = np.array([x[i+1] - x[i], y[i+1] - y[i]])  # 下一个点的速度向量
+            v1_norm = np.linalg.norm(v1)
+            v2_norm = np.linalg.norm(v2)
+            if v1_norm > 0 and v2_norm > 0:  # 避免除以零
+                cosine_angle = np.dot(v1, v2) / (v1_norm * v2_norm)
+                angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0)) * (180.0 / np.pi)  # 计算夹角（度数）
+                if angle > threshold_angle:  # 如果角度变化较大，判定为突变点
+                    velocity_change_points.append(i)
+
+        # 如果没有速度突变点，则返回False
+        if not velocity_change_points:
+            return False
+
+        # 对每个速度突变点之前和之后的点序列进行距离计算
+        for change_point in velocity_change_points:
+            # 速度突变点之前的点序列
+            before_points = trajectory[:change_point]
+            # 速度突变点之后的点序列
+            after_points = trajectory[change_point:]
+
+            # 计算突变点之前的平均速度
+            dist_before = [calculate_distance(before_points[i], before_points[i+1]) for i in range(len(before_points)-1)]
+            vel_1 = np.mean(dist_before) if dist_before else 0
+
+            # 计算突变点之后的平均速度
+            dist_after = [calculate_distance(after_points[i], after_points[i+1]) for i in range(len(after_points)-1)]
+            vel_2 = np.mean(dist_after) if dist_after else 0
+
+            # 判断是否为碰撞点
+            if vel_1 > distance_ratio_threshold * vel_2:  # 根据速度变化判断碰撞
+                return True
 
     return False
 
