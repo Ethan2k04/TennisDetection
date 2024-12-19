@@ -301,6 +301,9 @@ def build_target_status(config):
     return target_status
 
 
+index = 0
+valid_list = [1, 5, 9, 13, 18, 28, 31, 49, 57, 58, 59, 63, 64, 66, 67, 71, 72, 76, 77, 79, 82, 85, 89, 97]
+
 # 更新靶标内网球识别状态
 def update_target_status(target_status, ball_center):
     for key, value in target_status.items():
@@ -319,9 +322,11 @@ def update_target_status(target_status, ball_center):
 def check_target_status(target_status, frame):
     for key, value in target_status.items():
         status = target_status[key]
-        if time.time() - status["last_update_time"] > 1 and status["has_ball"]:
+        global index
+        if time.time() - status["last_update_time"] > 0.2 and status["has_ball"]:
                 # print(f"target_id: {key} checked")
                 is_collided = trajectory_fitting(np.array(status["trajectory"]), frame)
+                index += 1
                 status["trajectory"] = []
                 status["has_ball"] = False
                 if is_collided:
@@ -337,16 +342,15 @@ def trajectory_fitting(trajectory, frame):
         x = trajectory[:, 0]
         y = trajectory[:, 1]
         for xi, yi in zip(x, y):
-            cv2.circle(frame, (xi, yi), radius=5, color=(0, 255, 0), thickness=-1)  # Green dots
+            cv2.circle(frame, (xi, yi), radius=10, color=(0, 255, 0), thickness=-1)  # Green dots
         coeffs_1 = np.polyfit(x, y, 1)
         residuals_1 = np.sum((np.polyval(coeffs_1, x) - y) ** 2) / len(x)
         coeffs_2 = np.polyfit(x, y, 2)
         residuals_2 = np.sum((np.polyval(coeffs_2, x) - y) ** 2) / len(x)
-        mul_residual = residuals_1 * residuals_2
+        # print(f"len: {len(x)}, res1: {residuals_1}. res2: {residuals_2}")
 
         # 碰撞判断：残差大于阈值
-        # print(f"res_1: {residuals_1}, res_2: {residuals_2}, mul: {mul_residual}")
-        if mul_residual > NONLINEAR_THRESHOLD:  # 根据实际场景调整阈值
+        if residuals_1 > 300 and residuals_2 > 15:
             return True
 
     return False

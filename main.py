@@ -58,7 +58,7 @@ class TargetManager:
             for contour in contours:
                 (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
                 weight_y = 10  # Give y a higher weight
-                weight_x = 1    # Give x a lower weight
+                weight_x = 3    # Give x a lower weight
                 score_value = weight_y * y + weight_x * x  # Compute score
                 target_data.append({
                     "id": target_id,
@@ -149,6 +149,7 @@ class VideoProcessor:
         frame = draw_target_boxes(frame, config)
 
         if len(self.target_status.keys()) > 0:
+            ball_center = (0, 0)
             for ball_id, ball in enumerate(ball_result):
                 ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
                 update_target_status(self.target_status, ball_center)
@@ -178,8 +179,10 @@ class VideoProcessor:
         current_time = time.time()
         frame_rate = round(1 / (current_time - self.last_frame_time))
         self.last_frame_time = current_time
-        cv2.putText(frame, f"Score: {self.score_player}", SCORE_ORG, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR,
-                    SCORE_THICKNESS)
+        # cv2.putText(frame, f"Score: {self.score_player}", SCORE_ORG, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR,
+        #             SCORE_THICKNESS)
+        cv2.putText(frame, f"Score: ", SCORE_ORG, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR,
+            SCORE_THICKNESS)
         cv2.putText(frame, f"FPS: {frame_rate}", (self.frame_width - 160, 30), cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE,
                     FPS_COLOR, FPS_THICKNESS)
         cv2.imshow("Video Detection", frame)
