@@ -263,20 +263,34 @@ def detect_target(frame):
 # 根据检测结果绘制标靶目标框
 def draw_target_boxes(frame, config):
     """
-    根据检出的标靶轮廓绘制目标框
+    根据检出的标靶轮廓绘制目标框和椭圆
     """
     for key, value in config.items():
         cls = value["cls"]
-        x = int(value["center_x"])
-        y = int(value["center_y"])
-        major_axis = int(value["major_axis"])
-        minor_axis = int(value["minor_axis"])
-        label = "Target_" + str(key)
+        x = int(value["center_x"])   # 椭圆中心点 x 坐标
+        y = int(value["center_y"])   # 椭圆中心点 y 坐标
+        major_axis = int(value["major_axis"])  # 椭圆的长轴长度
+        minor_axis = int(value["minor_axis"])  # 椭圆的短轴长度
+        label = "Target_" + str(key)  # 标签
         text_position = (x + int(minor_axis / 2) + 10, y - int(major_axis / 2))
-        cv2.rectangle(frame, (x - int(minor_axis / 2), y - int(major_axis / 2)),
-                      (x + int(minor_axis / 2), y + int(major_axis / 2)), TARGET_COLOR, LINE_THICKNESS)
-        cv2.putText(frame, label, text_position, cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, TARGET_COLOR,
-                    LINE_THICKNESS)
+
+        # 绘制长方形框
+        cv2.rectangle(frame, 
+                      (x - int(minor_axis / 2), y - int(major_axis / 2)),
+                      (x + int(minor_axis / 2), y + int(major_axis / 2)),
+                      TARGET_COLOR, LINE_THICKNESS)  # 绿色矩形框，线条粗细为 2
+
+        # 绘制椭圆
+        cv2.ellipse(frame,
+                    (x, y),                    # 椭圆中心
+                    (minor_axis // 2, major_axis // 2),  # 半长轴和半短轴
+                    0,                          # 旋转角度，0 表示不旋转
+                    0, 360,                     # 绘制的角度范围（完整的椭圆）
+                    TARGET_COLOR,                # 椭圆的颜色（红色）
+                    LINE_THICKNESS)                          # 椭圆边框的粗细
+
+        # 在框旁边显示标签
+        cv2.putText(frame, label, text_position, cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, TARGET_COLOR, LINE_THICKNESS)
 
     return frame
 
@@ -301,22 +315,27 @@ def build_target_status(config):
     return target_status
 
 
-index = 0
-valid_list = [1, 5, 9, 13, 18, 28, 31, 49, 57, 58, 59, 63, 64, 66, 67, 71, 72, 76, 77, 79, 82, 85, 89, 97]
-
 # 更新靶标内网球识别状态
 def update_target_status(target_status, ball_center):
     for key, value in target_status.items():
         status = target_status[key]
         target_center = status["center"]
-        target_width = status["width"]
-        target_height = status["height"]
-        if (target_center[0] - target_width // 2 <= ball_center[0] <= target_center[0] + target_width // 2) and \
-                (target_center[1] - target_height // 2 <= ball_center[1] <= target_center[1] + target_height // 2):
+        target_width = status["width"]  # 短轴
+        target_height = status["height"]  # 长轴
+
+        # 计算椭圆的短轴和长轴
+        a = target_width / 2  # 半短轴
+        b = target_height / 2  # 半长轴
+
+        # 使用椭圆方程判断球是否在椭圆范围内
+        if ((ball_center[0] - target_center[0]) ** 2) / a ** 2 + ((ball_center[1] - target_center[1]) ** 2) / b ** 2 <= 1:
             # print(f"ball detected in target_{key}")
             status["last_update_time"] = time.time()
             status["trajectory"].append(ball_center)
             status["has_ball"] = True
+        else:
+            status["has_ball"] = False
+    return target_status
 
 
 # 检查每个靶标内的网球轨迹状态

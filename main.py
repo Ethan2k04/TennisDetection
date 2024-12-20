@@ -15,7 +15,7 @@ from kernel import detect_balls, detect_target, is_target_result_valid, build_ta
     draw_target_boxes, draw_ball_boxes, check_target_status
 from tools import create_trackbar, save_target_to_config,  get_trackbar_reset_target_switch, log_with_timestamp
 from constants import CONFIG_FILE, SCORE_ORG, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS, FPS_SCALE, FPS_COLOR, \
-    FPS_THICKNESS, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE, BALL_HIT_WAIT_SEC
+    FPS_THICKNESS, FPS_ORG, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE, BALL_HIT_WAIT_SEC
 
 
 # 目标管理类
@@ -163,6 +163,7 @@ class VideoProcessor:
                         "x": ball_center[0],
                         "y": ball_center[1],
                         "score": score,
+                        # 服务器那边好像目前不能接收这两个字段
                         # "target_id": idx,
                         # "device_id": mac_address
                     }
@@ -181,8 +182,7 @@ class VideoProcessor:
         self.last_frame_time = current_time
         cv2.putText(frame, f"Score: {self.score_player}", SCORE_ORG, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR,
                     SCORE_THICKNESS)
-        cv2.putText(frame, f"FPS: {frame_rate}", (self.frame_width - 160, 30), cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE,
-                    FPS_COLOR, FPS_THICKNESS)
+        cv2.putText(frame, f"FPS: {frame_rate}", FPS_ORG, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE, FPS_COLOR, FPS_THICKNESS)
         cv2.imshow("Video Detection", frame)
 
         return frame

@@ -64,6 +64,7 @@ SCORE_ORG = (30, 50)
 FPS_THICKNESS = 3
 FPS_SCALE = 1
 FPS_COLOR = (0, 255, 0)
+FPS_ORG = (SCREEN_WIDTH - 30, 50)
 
 # 判断椭圆最少的多边形边数
 MIN_POLY = 5
