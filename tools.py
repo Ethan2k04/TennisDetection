@@ -34,15 +34,13 @@ def create_trackbar():
     cv2.namedWindow("Trackbars", cv2.WINDOW_NORMAL)
     cv2.createTrackbar("UP_V_BLACK", "Trackbars", UPPER_BLACK[2], 255, nothing)
     cv2.createTrackbar("LOW_V_WHITE", "Trackbars", LOWER_WHITE[2], 255, nothing)
-    cv2.createTrackbar("BALL_CONF", "Trackbars", int(BALL_CONF * 100), 100, nothing)
-    cv2.createTrackbar("TARGET_CONF", "Trackbars", int(TARGET_CONF * 100), 100, nothing)
-    cv2.createTrackbar("BALL_HIT_WAIT_SEC", "Trackbars", int(BALL_HIT_WAIT_SEC * 100), 100, nothing)
-    cv2.createTrackbar("RETARGET_WAIT_SEC", "Trackbars", RETARGET_WAIT_SEC, 100, nothing)
     cv2.createTrackbar("REFINE_KSIZE", "Trackbars", REFINE_KSIZE, 30, nothing)
     cv2.createTrackbar("ERODE_KSIZE", "Trackbars", ERODE_KSIZE, 30, nothing)
     cv2.createTrackbar("ERODE_ITER", "Trackbars", ERODE_ITER, 10, nothing)
-    cv2.createTrackbar("RESET_TARGET_SWITCH", "Trackbars", 0, 1, nothing)
-
+    cv2.createTrackbar("BALL_CONF", "Trackbars", int(BALL_CONF * 100), 100, nothing)
+    cv2.createTrackbar("TARGET_CONF", "Trackbars", int(TARGET_CONF * 100), 100, nothing)
+    cv2.createTrackbar("BALL_HIT_WAIT_SEC", "Trackbars", int(BALL_HIT_WAIT_SEC * 100), 100, nothing)
+    cv2.createTrackbar("RETARGET_WAIT_SEC", "Trackbars", int(BALL_HIT_WAIT_SEC * 100), 100, nothing)
 
 def get_trackbar_values_filter():
     # 获取滑块的当前值
@@ -67,7 +65,7 @@ def get_trackbar_values_wait_sec():
     ball_hit = cv2.getTrackbarPos("BALL_HIT_WAIT_SEC", "Trackbars")
     retarget = cv2.getTrackbarPos("RETARGET_WAIT_SEC", "Trackbars")
 
-    return float(ball_hit / 100), float(retarget)
+    return float(ball_hit / 100), float(retarget / 100)
 
 
 def get_trackbar_values_morphology():
@@ -78,9 +76,9 @@ def get_trackbar_values_morphology():
     return max(refine_ksize, 1), erode_ksize, erode_iter
 
 
-def get_trackbar_reset_target_switch():
-    # Get the value of the "RESET_TARGET_SWITCH" trackbar
-    switch_value = cv2.getTrackbarPos("RESET_TARGET_SWITCH", "Trackbars")
+# def get_trackbar_reset_target_switch():
+#     # Get the value of the "RESET_TARGET_SWITCH" trackbar
+#     switch_value = cv2.getTrackbarPos("RESET_TARGET_SWITCH", "Trackbars")
     
-    # Return the boolean value (0 = No, 1 = Yes)
-    return bool(switch_value)
+#     # Return the boolean value (0 = No, 1 = Yes)
+#     return bool(switch_value)

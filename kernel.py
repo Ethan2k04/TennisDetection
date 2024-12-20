@@ -11,7 +11,7 @@ from tools import get_trackbar_values_filter, get_trackbar_values_confidence, \
     get_trackbar_values_morphology
 from constants import TENNIS_MODEL_PATH, TARGET_MODEL_PATH, BALL_COLOR, LINE_THICKNESS, FONT_SCALE, LOWER_BLACK, \
                        UPPER_WHITE, RANDOM_STATE, MIN_POLY, AREA_THRESHOLD_PERCENTAGE, PERI_BIAS, SETTINGS_FILE, \
-                       TARGET_COLOR, NONLINEAR_THRESHOLD, IMG_SIZE
+                       TARGET_COLOR, NONLINEAR_THRESHOLD, IMG_SIZE, TEXT_MARGIN, MIN_DETECTION_SAMPLE, TRACE_RADIUS
 
 
 # yolo11 模型初始化
@@ -23,7 +23,7 @@ co_helper = COCO_test_helper(enable_letter_box=True)
 area_threshold = 0
 
 
-# 使用yolo11检测网球
+# 使用yolo11检测网球（核心）
 def detect_balls(frame):
     """
     使用 YOLO 检测网球，并根据检测结果绘制目标框。
@@ -154,8 +154,8 @@ def is_ellipse(contour):
     return is_valid_ellipse
 
 
-# 检测目标轮廓
-def detect_target(frame):
+# 检测目标轮廓（核心）
+def detect_target(frame, debug=False):
     """
     检测 frame 中的标靶轮廓，返回字典结果
     """
@@ -182,9 +182,8 @@ def detect_target(frame):
     mask = cv2.erode(new_mask, kernel, iterations=erode_iter)
 
     # =================================================== #
-    # cv2.imwrite("target_mask.png", mask)  # 调试用
-    # cv2.imshow("target_mask", mask)       # 调试用
-    # cv2.moveWindow("target_mask", CENTER_X, CENTER_Y)
+    if debug:
+        cv2.imshow("target_mask", mask)   # 调试用
     # =================================================== #
 
     contours, _ = cv2.findContours(mask, cv2.MORPH_ELLIPSE, cv2.CHAIN_APPROX_NONE)
@@ -195,8 +194,6 @@ def detect_target(frame):
     # 用于保存符合 YOLO 检测条件的轮廓
     valid_ellipses = []
 
-    # print(f"eliipses:{len(ellipses)}")    # 调试用
-
     # 遍历椭圆轮廓并进行 YOLO 检测
     for contour in ellipses:
         global area_threshold
@@ -204,7 +201,11 @@ def detect_target(frame):
             # 获取轮廓的边界框
             x, y, w, h = cv2.boundingRect(contour)
             cropped_region = frame[y: y + h, x: x + w]  # 截取对应的区域
+
+            # =================================================== #
             # cv2.imshow("cropped_region", cropped_region)  # 调试用
+            # =================================================== #
+
             # 使用YOLO模型进行检测
             _, target_conf = get_trackbar_values_confidence()
             img = co_helper.letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
@@ -216,13 +217,12 @@ def detect_target(frame):
 
             # 判断检测是否有结果，如果有结果则保留该轮廓
             if boxes is not None and len(boxes) > 0:
-                valid_ellipses.append(contour)  # 如果检测到目标，保留该轮廓
+                valid_ellipses.append(contour)
 
     # 计算所有有效椭圆的面积并排序
     area_list = sorted([cv2.contourArea(contour) for contour in valid_ellipses])
     if len(area_list) > 0:
         area_threshold = max(area_list) / AREA_THRESHOLD_PERCENTAGE
-    # print(f"valid_ellipses: {len(valid_ellipses)}")   # 调试用
 
     # 识别的标靶结果
     result = {"undef": []}
@@ -266,22 +266,16 @@ def draw_target_boxes(frame, config):
     根据检出的标靶轮廓绘制目标框和椭圆
     """
     for key, value in config.items():
-        cls = value["cls"]
-        x = int(value["center_x"])   # 椭圆中心点 x 坐标
-        y = int(value["center_y"])   # 椭圆中心点 y 坐标
-        major_axis = int(value["major_axis"])  # 椭圆的长轴长度
-        minor_axis = int(value["minor_axis"])  # 椭圆的短轴长度
-        label = "Target_" + str(key)  # 标签
-        text_position = (x + int(minor_axis / 2) - 30, y - int(major_axis / 2) + 30)
+        cls = value["cls"]                      # 甲方说要显示序号而不是分数（保留）
+        x = int(value["center_x"])              # 椭圆中心点 x 坐标
+        y = int(value["center_y"])              # 椭圆中心点 y 坐标
+        major_axis = int(value["major_axis"])   # 椭圆的长轴长度
+        minor_axis = int(value["minor_axis"])   # 椭圆的短轴长度
+        label = "Target_" + str(key)            # 标签
+        text_position = (x + int(minor_axis / 2) - TEXT_MARGIN, y - int(major_axis / 2) + TEXT_MARGIN)
 
         # 绘制椭圆
-        cv2.ellipse(frame,
-                    (x, y),                    # 椭圆中心
-                    (minor_axis // 2, major_axis // 2),  # 半长轴和半短轴
-                    0,                          # 旋转角度，0 表示不旋转
-                    0, 360,                     # 绘制的角度范围（完整的椭圆）
-                    TARGET_COLOR,                # 椭圆的颜色（红色）
-                    LINE_THICKNESS)                          # 椭圆边框的粗细
+        cv2.ellipse(frame, (x, y), (minor_axis // 2, major_axis // 2), 0, 0, 360, TARGET_COLOR, LINE_THICKNESS)
 
         # 在框旁边显示标签
         cv2.putText(frame, label, text_position, cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, TARGET_COLOR, LINE_THICKNESS)
@@ -314,12 +308,10 @@ def update_target_status(target_status, ball_center):
     for key, value in target_status.items():
         status = target_status[key]
         target_center = status["center"]
-        target_width = status["width"]  # 短轴
-        target_height = status["height"]  # 长轴
-
-        # 计算椭圆的短轴和长轴
-        a = target_width / 2  # 半短轴
-        b = target_height / 2  # 半长轴
+        target_width = status["width"]      # 短轴
+        target_height = status["height"]    # 长轴
+        a = target_width / 2                # 半短轴
+        b = target_height / 2               # 半长轴
 
         # 使用椭圆方程判断球是否在椭圆范围内
         if ((ball_center[0] - target_center[0]) ** 2) / a ** 2 + ((ball_center[1] - target_center[1]) ** 2) / b ** 2 <= 1:
@@ -336,7 +328,6 @@ def check_target_status(target_status, frame):
         status = target_status[key]
         global index
         if time.time() - status["last_update_time"] > 0.2 and status["has_ball"]:
-                # print(f"target_id: {key} checked")
                 is_collided = trajectory_fitting(np.array(status["trajectory"]), frame)
                 status["trajectory"] = []
                 status["has_ball"] = False
@@ -353,16 +344,11 @@ def calculate_distance(p1, p2):
 
 # 计算两个向量的夹角（返回角度）
 def calculate_angle(v1, v2):
-    # 计算点积
     dot_product = np.dot(v1, v2)
-    # 计算各自的范数
     norm_v1 = np.linalg.norm(v1)
     norm_v2 = np.linalg.norm(v2)
-    # 计算余弦值
     cos_theta = dot_product / (norm_v1 * norm_v2)
-    # 计算夹角的弧度值
     angle_radians = np.arccos(np.clip(cos_theta, -1.0, 1.0))
-    # 将弧度转换为度数
     angle_degrees = np.degrees(angle_radians)
     return angle_degrees
 
@@ -374,14 +360,21 @@ def trajectory_fitting(trajectory, frame, threshold_angle=20, velocity_ratio_thr
 
     # 绘制轨迹点
     for xi, yi in zip(x, y):
-        cv2.circle(frame, (xi, yi), radius=10, color=(0, 255, 0), thickness=-1)  # 绿色圆点
-    if len(trajectory) > 6:  # 确保有足够的点进行计算
+        cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
+
+     # 若没有足够的点进行计算（使用线性拟合）
+    if len(trajectory) <= MIN_DETECTION_SAMPLE:
+        coeffs = np.polyfit(x, y, 1)
+        residuals = np.sum((np.polyval(coeffs, x) - y) ** 2) / len(x)
+        if residuals > NONLINEAR_THRESHOLD:
+            return True
+    # 若有足够的点进行计算（使用突变点检测）
+    else:
         # 计算速度方向变化的突变点
         velocity_change_points = []
         for i in range(1, len(trajectory) - 1):
-            # 计算前后两个速度向量的方向
-            v1 = np.array([x[i] - x[i-1], y[i] - y[i-1]])  # 当前点的速度向量
-            v2 = np.array([x[i+1] - x[i], y[i+1] - y[i]])  # 下一个点的速度向量
+            v1 = np.array([x[i] - x[i-1], y[i] - y[i-1]])
+            v2 = np.array([x[i+1] - x[i], y[i+1] - y[i]])
             v1_norm = np.linalg.norm(v1)
             v2_norm = np.linalg.norm(v2)
             if v1_norm > 0 and v2_norm > 0:
@@ -397,14 +390,10 @@ def trajectory_fitting(trajectory, frame, threshold_angle=20, velocity_ratio_thr
 
         # 对每个速度突变点之前和之后的点序列进行距离计算
         for change_point in velocity_change_points:
-            # 获取 change_point 前后的点
-            before_point = trajectory[change_point - 1]  # change_point 前一个点
-            after_point = trajectory[change_point + 1]   # change_point 后一个点
-            # 计算 change_point 到前一个点的向量
+            before_point = trajectory[change_point - 1]
+            after_point = trajectory[change_point + 1]
             v_before = np.array(trajectory[change_point]) - np.array(before_point)
-            # 计算 change_point 到后一个点的向量
             v_after = np.array(after_point) - np.array(trajectory[change_point])
-            # 计算这两个向量的夹角
             angle = calculate_angle(v_before, v_after)
             print(f"Change point at {change_point}: Angle between vectors = {angle:.2f}°")
             if angle > threshold_angle and angle < 180 - threshold_angle:

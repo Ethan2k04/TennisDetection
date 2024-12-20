@@ -5,17 +5,19 @@ import cv2
 import os
 import threading
 import uuid
-# Get the MAC address
-mac = uuid.getnode()
-# Convert it to a readable format
-mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8))
-from typing import Any
 from network import push_data
 from kernel import detect_balls, detect_target, is_target_result_valid, build_target_status, update_target_status, \
     draw_target_boxes, draw_ball_boxes, check_target_status
-from tools import create_trackbar, save_target_to_config,  get_trackbar_reset_target_switch, log_with_timestamp
+from tools import create_trackbar, save_target_to_config, log_with_timestamp
 from constants import CONFIG_FILE, SCORE_ORG, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS, FPS_SCALE, FPS_COLOR, \
-    FPS_THICKNESS, FPS_ORG, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE, BALL_HIT_WAIT_SEC
+    FPS_THICKNESS, FPS_ORG, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE, BALL_HIT_WAIT_SEC,\
+    TITLE_THICKNESS, TITLE_ORG, TITLE_COLOR, TITLE_SCALE, X_COOR_WEIGHT, Y_COOR_WEIGHT, HINT_COLOR, HINT_1_ORG, \
+    HINT_2_ORG, HINT_SCALE, HINT_THICKNESS
+
+
+# 获取香橙派设备的MAC地址
+mac = uuid.getnode()
+mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8))
 
 
 # 目标管理类
@@ -25,21 +27,23 @@ class TargetManager:
         self.last_relocate_time = time.time()
         self.num_target = 0
         self.target_data = {}
+        self.force_retarget = False
+        self.debug = False
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, 'r') as file:
                 settings = json.load(file)
                 self.num_target = settings["num_target"]
 
     def relocate_target(self, frame, retarget_wait_sec: float) -> bool:
-        force_retarget = get_trackbar_reset_target_switch()
-        if (not self.is_target_set or force_retarget) and time.time() - self.last_relocate_time > retarget_wait_sec:
-            target_result = detect_target(frame)
+        if (not self.is_target_set or self.force_retarget) and time.time() - self.last_relocate_time > retarget_wait_sec:
+            target_result = detect_target(frame, self.debug)
             self.last_relocate_time = time.time()
             if is_target_result_valid(target_result, self.num_target):
                 self.target_data = self._parse_target_result(target_result)
                 save_target_to_config(self.target_data)
                 log_with_timestamp(f"\033[92m[Valid] Target saved at {time.strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
                 self.is_target_set = True
+                self.force_retarget = False
                 return True
             else:
                 self.target_data = self._parse_target_result(target_result)
@@ -53,13 +57,11 @@ class TargetManager:
         target_data = []
         target_id = 0
 
-        # Collect all target details into a list with a computed score
+        # 将靶标检测结果转化为临时json格式
         for score, contours in target_result.items():
             for contour in contours:
                 (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
-                weight_y = 10  # Give y a higher weight
-                weight_x = 3    # Give x a lower weight
-                score_value = weight_y * y + weight_x * x  # Compute score
+                score_value = X_COOR_WEIGHT * x + Y_COOR_WEIGHT * y
                 target_data.append({
                     "id": target_id,
                     "cls": score,
@@ -72,10 +74,10 @@ class TargetManager:
                 })
                 target_id += 1
 
-        # Sort the target data by score_value
+        # 对靶标根据score_value进行排序（以实现从上到下从左到右编号）
         target_data.sort(key=lambda item: item["score_value"])
 
-        # Reformat into the desired dictionary structure
+        # 转化为结果json格式
         sorted_target_data = {
             str(idx + 1): {
                 "cls": target["cls"],
@@ -89,7 +91,6 @@ class TargetManager:
         }
 
         return sorted_target_data
-
 
 
 # 视频处理类
@@ -138,6 +139,14 @@ class VideoProcessor:
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
+            if cv2.waitKey(1) & 0xFF == ord('h'):
+                self.target_manager.force_retarget = True
+            if cv2.waitKey(1) & 0xFF == ord('j'):
+                if self.target_manager.debug == False:
+                    self.target_manager.debug = True
+                else:
+                    self.target_manager.debug = False
+
         self._cleanup()
 
     def _update_score(self, frame) -> cv2.Mat:
@@ -180,9 +189,11 @@ class VideoProcessor:
         current_time = time.time()
         frame_rate = round(1 / (current_time - self.last_frame_time))
         self.last_frame_time = current_time
-        cv2.putText(frame, f"Score: {self.score_player}", SCORE_ORG, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR,
-                    SCORE_THICKNESS)
+        cv2.putText(frame, "网球落点检测系统v1.0", TITLE_ORG, cv2.FONT_HERSHEY_SIMPLEX, TITLE_SCALE, TITLE_COLOR, TITLE_THICKNESS)
+        cv2.putText(frame, f"Score: {self.score_player}", SCORE_ORG, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS)
         cv2.putText(frame, f"FPS: {frame_rate}", FPS_ORG, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE, FPS_COLOR, FPS_THICKNESS)
+        cv2.putText(frame, f"按 H 键重新检测目标", HINT_1_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
+        cv2.putText(frame, f"按 J 键显示检测遮罩", HINT_2_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
         cv2.imshow("Video Detection", frame)
 
         return frame

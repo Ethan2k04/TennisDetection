@@ -24,8 +24,11 @@ RETARGET_WAIT_SEC = 1
 # 等待多少秒判断碰撞
 BALL_HIT_WAIT_SEC = 1
 
+# 至少多少个点开启碰撞检测
+MIN_DETECTION_SAMPLE = 6
+
 # 判断是否为碰撞的直线拟合阈值
-NONLINEAR_THRESHOLD = 5
+NONLINEAR_THRESHOLD = 6
 
 # 黑色的HSV范围
 LOWER_BLACK = np.array([0, 0, 0])
@@ -40,6 +43,10 @@ REFINE_KSIZE = 12
 ERODE_KSIZE = 4
 ERODE_ITER = 3
 
+# 靶标排序权重
+X_COOR_WEIGHT = 10
+Y_COOR_WEIGHT = 3
+
 # 随机数种子
 RANDOM_STATE = 42
 
@@ -51,20 +58,36 @@ FONT_SCALE = 1
 BALL_COLOR = (0, 255, 0)
 TARGET_COLOR = (0, 0, 255)
 
-# 标签文字显示偏移
-TEXT_MARGIN = 10
+# 轨迹点半径
+TRACE_RADIUS = 10
 
-# 分数文字的粗细
+# 标签文字显示偏移
+TEXT_MARGIN = 30
+
+# 标题文字的参数
+TITLE_THICKNESS = 3
+TITLE_SCALE = 1
+TITLE_COLOR = (0, 0, 0)
+TITLE_ORG = (CENTER_X, CENTER_Y)
+
+# 分数文字的参数
 SCORE_THICKNESS = 3
 SCORE_SCALE = 1
 SCORE_COLOR = (0, 255, 255)
 SCORE_ORG = (30, 50)
 
-# 帧率文字的粗细
+# 帧率文字的参数
 FPS_THICKNESS = 3
 FPS_SCALE = 1
 FPS_COLOR = (0, 255, 0)
 FPS_ORG = (SCREEN_WIDTH - 30, 50)
+
+# 提示文字的参数
+HINT_THICKNESS = 3
+HINT_SCALE = 1
+HINT_COLOR = (0, 255, 0)
+HINT_1_ORG = (30, SCREEN_HEIGHT - 60)
+HINT_2_ORG = (30, SCREEN_HEIGHT - 30)
 
 # 判断椭圆最少的多边形边数
 MIN_POLY = 5
