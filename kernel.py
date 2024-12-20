@@ -272,13 +272,7 @@ def draw_target_boxes(frame, config):
         major_axis = int(value["major_axis"])  # 椭圆的长轴长度
         minor_axis = int(value["minor_axis"])  # 椭圆的短轴长度
         label = "Target_" + str(key)  # 标签
-        text_position = (x + int(minor_axis / 2) + 10, y - int(major_axis / 2))
-
-        # 绘制长方形框
-        cv2.rectangle(frame, 
-                      (x - int(minor_axis / 2), y - int(major_axis / 2)),
-                      (x + int(minor_axis / 2), y + int(major_axis / 2)),
-                      TARGET_COLOR, LINE_THICKNESS)  # 绿色矩形框，线条粗细为 2
+        text_position = (x + int(minor_axis / 2) - 30, y - int(major_axis / 2) + 30)
 
         # 绘制椭圆
         cv2.ellipse(frame,
@@ -329,12 +323,10 @@ def update_target_status(target_status, ball_center):
 
         # 使用椭圆方程判断球是否在椭圆范围内
         if ((ball_center[0] - target_center[0]) ** 2) / a ** 2 + ((ball_center[1] - target_center[1]) ** 2) / b ** 2 <= 1:
-            # print(f"ball detected in target_{key}")
             status["last_update_time"] = time.time()
             status["trajectory"].append(ball_center)
             status["has_ball"] = True
-        else:
-            status["has_ball"] = False
+
     return target_status
 
 
@@ -346,7 +338,6 @@ def check_target_status(target_status, frame):
         if time.time() - status["last_update_time"] > 0.2 and status["has_ball"]:
                 # print(f"target_id: {key} checked")
                 is_collided = trajectory_fitting(np.array(status["trajectory"]), frame)
-                index += 1
                 status["trajectory"] = []
                 status["has_ball"] = False
                 if is_collided:
