@@ -12,7 +12,7 @@ from tools import create_trackbar, save_target_to_config, log_with_timestamp
 from constants import CONFIG_FILE, SCORE_ORG, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS, FPS_SCALE, FPS_COLOR, \
     FPS_THICKNESS, FPS_ORG, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE, BALL_HIT_WAIT_SEC,\
     TITLE_THICKNESS, TITLE_ORG, TITLE_COLOR, TITLE_SCALE, X_COOR_WEIGHT, Y_COOR_WEIGHT, HINT_COLOR, HINT_1_ORG, \
-    HINT_2_ORG, HINT_SCALE, HINT_THICKNESS
+    HINT_2_ORG, HINT_SCALE, HINT_THICKNESS, HINT_3_ORG
 
 
 # 获取香橙派设备的MAC地址
@@ -44,6 +44,7 @@ class TargetManager:
                 log_with_timestamp(f"\033[92m[Valid] Target saved at {time.strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
                 self.is_target_set = True
                 self.force_retarget = False
+                self.debug = False
                 return True
             else:
                 self.target_data = self._parse_target_result(target_result)
@@ -137,15 +138,13 @@ class VideoProcessor:
             if self.video_writer:
                 self.video_writer.write(frame)
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            key = cv2.waitKey(1)
+            if key & 0xFF == ord('q'):
                 break
-            if cv2.waitKey(1) & 0xFF == ord('h'):
+            elif key & 0xFF == ord('h'):
                 self.target_manager.force_retarget = True
-            if cv2.waitKey(1) & 0xFF == ord('j'):
-                if self.target_manager.debug == False:
-                    self.target_manager.debug = True
-                else:
-                    self.target_manager.debug = False
+            elif key & 0xFF == ord('j'):
+                self.target_manager.debug = True
 
         self._cleanup()
 
@@ -189,11 +188,12 @@ class VideoProcessor:
         current_time = time.time()
         frame_rate = round(1 / (current_time - self.last_frame_time))
         self.last_frame_time = current_time
-        cv2.putText(frame, "网球落点检测系统v1.0", TITLE_ORG, cv2.FONT_HERSHEY_SIMPLEX, TITLE_SCALE, TITLE_COLOR, TITLE_THICKNESS)
+        cv2.putText(frame, "TENNISv1.0", TITLE_ORG, cv2.FONT_HERSHEY_SIMPLEX, TITLE_SCALE, TITLE_COLOR, TITLE_THICKNESS)
         cv2.putText(frame, f"Score: {self.score_player}", SCORE_ORG, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS)
         cv2.putText(frame, f"FPS: {frame_rate}", FPS_ORG, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE, FPS_COLOR, FPS_THICKNESS)
-        cv2.putText(frame, f"按 H 键重新检测目标", HINT_1_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
-        cv2.putText(frame, f"按 J 键显示检测遮罩", HINT_2_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
+        cv2.putText(frame, f"Press H to retarget", HINT_1_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
+        cv2.putText(frame, f"Press J to show mask", HINT_2_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
+        cv2.putText(frame, f"Press Q to quit", HINT_3_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
         cv2.imshow("Video Detection", frame)
 
         return frame
