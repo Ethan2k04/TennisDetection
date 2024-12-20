@@ -357,16 +357,15 @@ def calculate_angle(v1, v2):
     return angle_degrees
 
 
-# 根据网球踪迹拟合直线并判断是否碰撞
-def trajectory_fitting(trajectory, frame, threshold_angle=20, velocity_ratio_threshold=2):
-    if len(trajectory) > 2:  # 确保有足够的点进行计算
-        x = trajectory[:, 0]
-        y = trajectory[:, 1]
+# 根据网球踪迹判断是否碰撞
+def trajectory_fitting(trajectory, frame, threshold_angle=20, velocity_ratio_threshold=1.5):
+    x = trajectory[:, 0]
+    y = trajectory[:, 1]
 
-        # 绘制轨迹点
-        for xi, yi in zip(x, y):
-            cv2.circle(frame, (xi, yi), radius=10, color=(0, 255, 0), thickness=-1)  # 绿色圆点
-
+    # 绘制轨迹点
+    for xi, yi in zip(x, y):
+        cv2.circle(frame, (xi, yi), radius=10, color=(0, 255, 0), thickness=-1)  # 绿色圆点
+    if len(trajectory) > 6:  # 确保有足够的点进行计算
         # 计算速度方向变化的突变点
         velocity_change_points = []
         for i in range(1, len(trajectory) - 1):
@@ -377,7 +376,9 @@ def trajectory_fitting(trajectory, frame, threshold_angle=20, velocity_ratio_thr
             v2_norm = np.linalg.norm(v2)
             if v1_norm > 0 and v2_norm > 0:
                 ratio = v1_norm / v2_norm
+                print(f"ratio {i}: {ratio}")
                 if ratio > velocity_ratio_threshold:
+                    print(f"velocity change point: {i}")
                     velocity_change_points.append(i)
 
         # 如果没有速度突变点，则返回False
@@ -390,13 +391,13 @@ def trajectory_fitting(trajectory, frame, threshold_angle=20, velocity_ratio_thr
             before_point = trajectory[change_point - 1]  # change_point 前一个点
             after_point = trajectory[change_point + 1]   # change_point 后一个点
             # 计算 change_point 到前一个点的向量
-            v_before = np.array(before_point) - np.array(trajectory[change_point])
+            v_before = np.array(trajectory[change_point]) - np.array(before_point)
             # 计算 change_point 到后一个点的向量
             v_after = np.array(after_point) - np.array(trajectory[change_point])
             # 计算这两个向量的夹角
             angle = calculate_angle(v_before, v_after)
             print(f"Change point at {change_point}: Angle between vectors = {angle:.2f}°")
-            if angle > threshold_angle:
+            if angle > threshold_angle and angle < 180 - threshold_angle:
                 return True
 
     return False
