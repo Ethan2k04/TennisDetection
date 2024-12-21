@@ -59,19 +59,32 @@ def handle_client(client_socket):
 
 
 # 服务器交互
-def start_server(host='0.0.0.0', port=9999):
+def start_server(host='0.0.0.0', port=9999, client_ip='10.128.51.10'):
+    """
+    启动服务器并向指定客户端 IP 地址发送 SYN 消息。
+    """
+    # 服务器套接字初始化
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
-    server_socket.listen(1)
+    server_socket.listen(1)  # 监听最多一个连接
     log_with_timestamp(f"服务端已启动，监听 {host}:{port}...")
 
     while True:
-        client_socket, addr = server_socket.accept()
-        log_with_timestamp(f"接收到来自 {addr} 的连接...")
-
-        # 创建线程处理客户端请求
-        client_handler = threading.Thread(target=handle_client, args=(client_socket,))
-        client_handler.start()
+        # 等待客户端连接
+        log_with_timestamp("等待客户端连接...")
+        
+        # 直接连接指定的客户端 IP 地址
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            client_socket.connect((client_ip, port))
+            log_with_timestamp(f"成功连接到客户端 {client_ip}:{port}")
+            
+            # 创建线程处理与该客户端的交互
+            client_handler = threading.Thread(target=handle_client, args=(client_socket,))
+            client_handler.start()
+        except Exception as e:
+            log_with_timestamp(f"连接失败: {str(e)}")
+            client_socket.close()
 
 
 # 推送数据函数

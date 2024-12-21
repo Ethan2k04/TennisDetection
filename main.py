@@ -227,6 +227,10 @@ def main():
     if len(sys.argv) > 2:
         output_path = sys.argv[2]
 
+    server_thread = threading.Thread(target=rabbit_hole)
+    server_thread.daemon = True
+    server_thread.start()
+
     if input_path.endswith(('.mp4', '.avi', '.mov')):
         if output_path:
             processor = VideoProcessor(input_source=input_path, output_path=output_path)
@@ -245,5 +249,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    server_thread = threading.Thread(target=rabbit_hole)
-    server_thread.start()
