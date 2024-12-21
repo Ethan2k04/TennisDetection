@@ -59,9 +59,9 @@ def handle_client(client_socket):
 
 
 # 服务器交互
-def start_server(host='0.0.0.0', port=9999, client_ip='10.128.51.10'):
+def start_server(host='0.0.0.0', port=9999, client_ip='10.128.51.10', max_syn_retries=5, syn_timeout=5):
     """
-    启动服务器并向指定客户端 IP 地址发送 SYN 消息。
+    启动服务器并向指定客户端 IP 地址发送 SYN 消息。直到接收到 ACK 才建立连接。
     """
     # 服务器套接字初始化
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -69,22 +69,41 @@ def start_server(host='0.0.0.0', port=9999, client_ip='10.128.51.10'):
     server_socket.listen(1)  # 监听最多一个连接
     log_with_timestamp(f"服务端已启动，监听 {host}:{port}...")
 
+    # 直接连接指定的客户端 IP 地址
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    retries = 0
     while True:
-        # 等待客户端连接
-        log_with_timestamp("等待客户端连接...")
-        
-        # 直接连接指定的客户端 IP 地址
-        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
+            log_with_timestamp(f"等待客户端连接...")
             client_socket.connect((client_ip, port))
-            log_with_timestamp(f"成功连接到客户端 {client_ip}:{port}")
-            
-            # 创建线程处理与该客户端的交互
-            client_handler = threading.Thread(target=handle_client, args=(client_socket,))
-            client_handler.start()
+
+            # 发送 SYN 消息并等待 ACK
+            send_syn_message(client_socket)
+
+            # 设置超时等待 ACK
+            client_socket.settimeout(syn_timeout)
+            ack_message = client_socket.recv(1024).decode('utf-8')
+
+            # 如果接收到 ACK，表示建立连接
+            log_with_timestamp(f"接收到 ACK 消息: {ack_message}")
+            break
+        except socket.timeout:
+            retries += 1
+            log_with_timestamp(f"超时未收到 ACK，重新发送 SYN 消息 (尝试 {retries}/{max_syn_retries})...")
+            # if retries >= max_syn_retries:
+            #     log_with_timestamp("超过最大重试次数，无法建立连接。")
+            #     return  # 如果超过最大重试次数则退出
         except Exception as e:
             log_with_timestamp(f"连接失败: {str(e)}")
-            client_socket.close()
+            retries += 1
+            # if retries >= max_syn_retries:
+            #     log_with_timestamp("超过最大重试次数，无法建立连接。")
+            #     return  # 如果超过最大重试次数则退出
+
+    # 如果成功建立连接，则处理客户端命令
+    client_handler = threading.Thread(target=handle_client, args=(client_socket,))
+    client_handler.start()
 
 
 # 推送数据函数
