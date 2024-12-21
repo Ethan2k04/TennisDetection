@@ -5,6 +5,7 @@ MAX_RETRY = 3           # 最大重传次数
 RETRY_INTERVAL = 5      # 重传时间间隔（秒）
 SALT = "learningxm"     # 固定盐值
 API_URL = "https://wq.hoeagri.com/api/Training/receiveInput"
+HANDLER_URL = "10.128.51.10"
 
 # CONFIG 文件名为 config.json
 CONFIG_FILE = "meta/config.json"

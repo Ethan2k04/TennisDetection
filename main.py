@@ -5,7 +5,7 @@ import cv2
 import os
 import threading
 import uuid
-from network import push_data
+from network import push_data, rabbit_hole
 from kernel import detect_balls, detect_target, is_target_result_valid, build_target_status, update_target_status, \
     draw_target_boxes, draw_ball_boxes, check_target_status
 from tools import create_trackbar, save_target_to_config, log_with_timestamp
@@ -208,11 +208,6 @@ class VideoProcessor:
         if self.video_writer:
             self.video_writer.release()
         cv2.destroyAllWindows()
-
-
-def rabbit_hole():
-    from network import start_server
-    start_server()
 
 
 # 主函数
