@@ -28,10 +28,13 @@ MIN_DETECTION_SAMPLE = 6
 # 判断是否为碰撞的直线拟合阈值
 NONLINEAR_THRESHOLD = 6
 
+# 判断速度突变点是否为碰撞点的角度阈值
 ANGLE_THRESHOLD = 25
 
+# 判断是否是速度突变点的前后速度比例阈值
 VELOCITY_RATIO_THRESHOLD = 1.5
 
+# 轨迹分割时间间隔
 TRAJECTORY_SPLIT_INTERVAL = 0.2
 
 # 黑色的HSV范围
@@ -94,6 +97,7 @@ HINT_1_ORG = (30, 400)
 HINT_2_ORG = (30, 425)
 HINT_3_ORG = (30, 450)
 
+# 日志文字的参数
 LOG_THICKNESS = 2
 LOG_SCALE = 0.5
 LOG_VALID_COLOR = (0, 255, 0)

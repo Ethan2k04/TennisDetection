@@ -108,14 +108,12 @@ class VideoProcessor:
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
         self.output_path = output_path
-
         self.target_manager = TargetManager()
         self.score_player = 0
         self.last_frame_time = time.time()
         self.ball_timestamps = {}
         self.target_status = {}
         self.last_collision_time = time.time()
-
         if self.output_path:
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             self.video_writer = cv2.VideoWriter(self.output_path, fourcc, self.fps, (self.frame_width, self.frame_height))
@@ -174,7 +172,7 @@ class VideoProcessor:
                         "x": ball_center[0],
                         "y": ball_center[1],
                         "score": score,
-                        # 服务器那边好像目前不能接收这两个字段
+                        # TODO: 服务器那边好像目前不能接收这两个字段
                         # "target_id": idx,
                         # "device_id": mac_address
                     }

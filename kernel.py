@@ -1,7 +1,6 @@
 import os
 import json
 import time
-
 import cv2
 import numpy as np
 from sklearn.cluster import KMeans
@@ -201,7 +200,7 @@ def detect_target(frame, debug=False):
         if cv2.contourArea(contour) > area_threshold:
             # 获取轮廓的边界框
             x, y, w, h = cv2.boundingRect(contour)
-            cropped_region = frame[y: y + h, x: x + w]  # 截取对应的区域
+            cropped_region = frame[y: y + h, x: x + w]
 
             # =================================================== #
             # cv2.imshow("cropped_region", cropped_region)  # 调试用
@@ -286,6 +285,9 @@ def draw_target_boxes(frame, config):
 
 # 构建靶标内网球识别状态
 def build_target_status(config):
+    """
+    根据config参数构建状态列表
+    """
     target_status = {}
     for key, value in config.items():
         target_center = (int(value["center_x"]), int(value["center_y"]))
@@ -306,6 +308,9 @@ def build_target_status(config):
 
 # 更新靶标内网球识别状态
 def update_target_status(target_status, ball_center):
+    """
+    根据网球位置更新状态列表
+    """
     for key, value in target_status.items():
         status = target_status[key]
         target_center = status["center"]
@@ -325,6 +330,9 @@ def update_target_status(target_status, ball_center):
 
 # 检查每个靶标内的网球轨迹状态
 def check_target_status(target_status, frame):
+    """
+    检查状态列表中是否有网球在靶标区域
+    """
     for key, value in target_status.items():
         status = target_status[key]
         global index
@@ -356,6 +364,9 @@ def calculate_angle(v1, v2):
 
 # 根据网球踪迹判断是否碰撞
 def trajectory_fitting(trajectory, frame):
+    """
+    根据trajectory轨迹判断是否发生碰撞
+    """
     x = trajectory[:, 0]
     y = trajectory[:, 1]
 
@@ -418,6 +429,9 @@ def refine_mask(mask, ksize):
 
 # 判断目标结果集合是否符合设定
 def is_target_result_valid(target_result, num_target):
+    """
+    判断靶标识别结果是否符合settings中的设定
+    """
     total_length = sum(len(v) for k, v in target_result.items() if k != "undef")
     return total_length == num_target and all(
         len(v) > 0 for k, v in target_result.items() if k != "undef")
