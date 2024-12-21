@@ -210,6 +210,11 @@ class VideoProcessor:
         cv2.destroyAllWindows()
 
 
+def rabbit_hole():
+    from network import start_server
+    start_server()
+
+
 # 主函数
 def main():
     if len(sys.argv) < 2:
@@ -240,3 +245,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    server_thread = threading.Thread(target=rabbit_hole)
+    server_thread.start()
