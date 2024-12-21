@@ -11,7 +11,8 @@ from tools import get_trackbar_values_filter, get_trackbar_values_confidence, \
     get_trackbar_values_morphology
 from constants import TENNIS_MODEL_PATH, TARGET_MODEL_PATH, BALL_COLOR, LINE_THICKNESS, FONT_SCALE, LOWER_BLACK, \
                        UPPER_WHITE, RANDOM_STATE, MIN_POLY, AREA_THRESHOLD_PERCENTAGE, PERI_BIAS, SETTINGS_FILE, \
-                       TARGET_COLOR, NONLINEAR_THRESHOLD, IMG_SIZE, TEXT_MARGIN, MIN_DETECTION_SAMPLE, TRACE_RADIUS
+                       TARGET_COLOR, NONLINEAR_THRESHOLD, IMG_SIZE, TEXT_MARGIN, MIN_DETECTION_SAMPLE, TRACE_RADIUS, \
+                       ANGLE_THRESHOLD, VELOCITY_RATIO_THRESHOLD, TRAJECTORY_SPLIT_INTERVAL
 
 
 # yolo11 模型初始化
@@ -327,7 +328,7 @@ def check_target_status(target_status, frame):
     for key, value in target_status.items():
         status = target_status[key]
         global index
-        if time.time() - status["last_update_time"] > 0.2 and status["has_ball"]:
+        if time.time() - status["last_update_time"] > TRAJECTORY_SPLIT_INTERVAL and status["has_ball"]:
                 is_collided = trajectory_fitting(np.array(status["trajectory"]), frame)
                 status["trajectory"] = []
                 status["has_ball"] = False
@@ -354,7 +355,7 @@ def calculate_angle(v1, v2):
 
 
 # 根据网球踪迹判断是否碰撞
-def trajectory_fitting(trajectory, frame, threshold_angle=20, velocity_ratio_threshold=1.5):
+def trajectory_fitting(trajectory, frame):
     x = trajectory[:, 0]
     y = trajectory[:, 1]
 
@@ -366,6 +367,7 @@ def trajectory_fitting(trajectory, frame, threshold_angle=20, velocity_ratio_thr
     if len(trajectory) <= MIN_DETECTION_SAMPLE:
         coeffs = np.polyfit(x, y, 1)
         residuals = np.sum((np.polyval(coeffs, x) - y) ** 2) / len(x)
+        # print(f"res: {residuals}")
         if residuals > NONLINEAR_THRESHOLD:
             return True
     # 若有足够的点进行计算（使用突变点检测）
@@ -379,9 +381,9 @@ def trajectory_fitting(trajectory, frame, threshold_angle=20, velocity_ratio_thr
             v2_norm = np.linalg.norm(v2)
             if v1_norm > 0 and v2_norm > 0:
                 ratio = v1_norm / v2_norm
-                print(f"ratio {i}: {ratio}")
-                if ratio > velocity_ratio_threshold:
-                    print(f"velocity change point: {i}")
+                # print(f"ratio {i}: {ratio}")
+                if ratio > VELOCITY_RATIO_THRESHOLD:
+                    # print(f"velocity change point: {i}")
                     velocity_change_points.append(i)
 
         # 如果没有速度突变点，则返回False
@@ -395,8 +397,8 @@ def trajectory_fitting(trajectory, frame, threshold_angle=20, velocity_ratio_thr
             v_before = np.array(trajectory[change_point]) - np.array(before_point)
             v_after = np.array(after_point) - np.array(trajectory[change_point])
             angle = calculate_angle(v_before, v_after)
-            print(f"Change point at {change_point}: Angle between vectors = {angle:.2f}°")
-            if angle > threshold_angle and angle < 180 - threshold_angle:
+            # print(f"Change point at {change_point}: Angle between vectors = {angle:.2f}°")
+            if angle > ANGLE_THRESHOLD and angle < 180 - ANGLE_THRESHOLD:
                 return True
 
     return False

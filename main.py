@@ -12,7 +12,8 @@ from tools import create_trackbar, save_target_to_config, log_with_timestamp
 from constants import CONFIG_FILE, SCORE_ORG, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS, FPS_SCALE, FPS_COLOR, \
     FPS_THICKNESS, FPS_ORG, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE, BALL_HIT_WAIT_SEC,\
     TITLE_THICKNESS, TITLE_ORG, TITLE_COLOR, TITLE_SCALE, X_COOR_WEIGHT, Y_COOR_WEIGHT, HINT_COLOR, HINT_1_ORG, \
-    HINT_2_ORG, HINT_SCALE, HINT_THICKNESS, HINT_3_ORG
+    HINT_2_ORG, HINT_SCALE, HINT_THICKNESS, HINT_3_ORG, LOG_VALID_ORG, LOG_INVALID_ORG, LOG_VALID_COLOR, \
+    LOG_INVALID_COLOR, LOG_THICKNESS, LOG_SCALE
 
 
 # 获取香橙派设备的MAC地址
@@ -25,6 +26,7 @@ class TargetManager:
     def __init__(self):
         self.is_target_set = False
         self.last_relocate_time = time.time()
+        self.target_saved_time = time.strftime('%Y-%m-%d %H:%M:%S')
         self.num_target = 0
         self.target_data = {}
         self.force_retarget = False
@@ -41,7 +43,8 @@ class TargetManager:
             if is_target_result_valid(target_result, self.num_target):
                 self.target_data = self._parse_target_result(target_result)
                 save_target_to_config(self.target_data)
-                log_with_timestamp(f"\033[92m[Valid] Target saved at {time.strftime('%Y-%m-%d %H:%M:%S')}\033[0m")
+                self.target_saved_time = time.strftime('%Y-%m-%d %H:%M:%S')
+                log_with_timestamp(f"\033[92m[Valid] Target saved at {self.target_saved_time}\033[0m")
                 self.is_target_set = True
                 self.force_retarget = False
                 self.debug = False
@@ -194,6 +197,10 @@ class VideoProcessor:
         cv2.putText(frame, f"Press H to retarget", HINT_1_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
         cv2.putText(frame, f"Press J to show mask", HINT_2_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
         cv2.putText(frame, f"Press Q to quit", HINT_3_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
+        if self.target_manager.is_target_set:
+                cv2.putText(frame, f"[Valid] Target saved at {self.target_manager.target_saved_time}", LOG_VALID_ORG, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE, LOG_VALID_COLOR, LOG_THICKNESS)
+        else:
+                cv2.putText(frame, f"[Invalid] No valid target detected. Retrying...", LOG_INVALID_ORG, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE, LOG_INVALID_COLOR, LOG_THICKNESS)
         cv2.imshow("Video Detection", frame)
 
         return frame
