@@ -8,10 +8,11 @@ from yolo11 import setup_model, post_process
 from py_utils.coco_utils import COCO_test_helper
 from tools import get_trackbar_values_filter, get_trackbar_values_confidence, \
     get_trackbar_values_morphology
-from constants import TENNIS_MODEL_PATH, TARGET_MODEL_PATH, BALL_COLOR, LINE_THICKNESS, FONT_SCALE, LOWER_BLACK, \
-                       UPPER_WHITE, RANDOM_STATE, MIN_POLY, AREA_THRESHOLD_PERCENTAGE, PERI_BIAS, SETTINGS_FILE, \
-                       TARGET_COLOR, NONLINEAR_THRESHOLD, IMG_SIZE, TEXT_MARGIN, MIN_DETECTION_SAMPLE, TRACE_RADIUS, \
-                       ANGLE_THRESHOLD, VELOCITY_RATIO_THRESHOLD, TRAJECTORY_SPLIT_INTERVAL
+from constants import ANGLE_THRESHOLD, AREA_THRESHOLD_PERCENTAGE, BALL_COLOR, ERODE_ITER, FONT_SCALE, IMG_SIZE, \
+    LINE_THICKNESS, LOWER_BLACK, MIN_DETECTION_SAMPLE, MIN_POLY, NONLINEAR_THRESHOLD, PERI_BIAS, RANDOM_STATE, \
+    SETTINGS_FILE, TARGET_COLOR, TARGET_MODEL_PATH, TENNIS_MODEL_PATH, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL, \
+    UPPER_WHITE, VELOCITY_RATIO_THRESHOLD
+
 
 
 # yolo11 模型初始化
@@ -36,13 +37,14 @@ def detect_balls(frame):
     outputs = model_tennis.run([img])
     boxes = []
     if outputs is not None:
-        boxes, _, _ = post_process(outputs)
+        boxes, _, scores = post_process(outputs)
 
     # 用于存储所有网球框的位置信息
     ball_positions = []
 
     # 遍历检测结果并提取位置信息
-    if boxes is not None:
+    print(f"ball scores: {scores}")
+    if boxes is not None and max(scores) > ball_conf:
         boxes = co_helper.get_real_box(boxes)
         for box in boxes:
             top, left, right, bottom = box
@@ -160,7 +162,7 @@ def detect_target(frame, debug=False):
     检测 frame 中的标靶轮廓，返回字典结果
     """
     # 获取 trackbar 设定的参数
-    refine_ksize, erode_ksize, erode_iter = get_trackbar_values_morphology()
+    refine_ksize, erode_ksize = get_trackbar_values_morphology()
 
     # 过滤目标颜色并精细化掩膜
     mask = filter_target_color(frame)
@@ -179,7 +181,7 @@ def detect_target(frame, debug=False):
 
     # 使用腐蚀操作进行降噪
     kernel = np.ones((erode_ksize, erode_ksize), np.uint8)
-    mask = cv2.erode(new_mask, kernel, iterations=erode_iter)
+    mask = cv2.erode(new_mask, kernel, iterations = ERODE_ITER)
 
     # =================================================== #
     if debug:
@@ -213,10 +215,11 @@ def detect_target(frame, debug=False):
             img = np.expand_dims(img, axis=0)
             outputs = model_digit.run([img])
             if outputs is not None:
-                boxes, _, _ = post_process(outputs)
+                boxes, _, scores = post_process(outputs)
 
+            print(f"target scores: {scores}")
             # 判断检测是否有结果，如果有结果则保留该轮廓
-            if boxes is not None and len(boxes) > 0:
+            if boxes is not None and len(boxes) > 0 and max(scores) > target_conf:
                 valid_ellipses.append(contour)
 
     # 计算所有有效椭圆的面积并排序
@@ -392,9 +395,7 @@ def trajectory_fitting(trajectory, frame):
             v2_norm = np.linalg.norm(v2)
             if v1_norm > 0 and v2_norm > 0:
                 ratio = v1_norm / v2_norm
-                # print(f"ratio {i}: {ratio}")
                 if ratio > VELOCITY_RATIO_THRESHOLD:
-                    # print(f"velocity change point: {i}")
                     velocity_change_points.append(i)
 
         # 如果没有速度突变点，则返回False
@@ -408,7 +409,6 @@ def trajectory_fitting(trajectory, frame):
             v_before = np.array(trajectory[change_point]) - np.array(before_point)
             v_after = np.array(after_point) - np.array(trajectory[change_point])
             angle = calculate_angle(v_before, v_after)
-            # print(f"Change point at {change_point}: Angle between vectors = {angle:.2f}°")
             if angle > ANGLE_THRESHOLD and angle < 180 - ANGLE_THRESHOLD:
                 return True
 

