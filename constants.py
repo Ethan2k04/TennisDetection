@@ -116,7 +116,7 @@ PERI_BIAS = 0.3
 BALL_CONF = 0.05
 
 # 标靶置信度
-TARGET_CONF = 0.3
+TARGET_CONF = 0.1
 
 # 过滤小面积靶标识别结果（占最大识别结果的百分比）
 AREA_THRESHOLD_PERCENTAGE = 10
