@@ -43,12 +43,12 @@ def detect_balls(frame):
     ball_positions = []
 
     # 遍历检测结果并提取位置信息
-    print(f"ball scores: {scores}")
-    if boxes is not None and max(scores) > ball_conf:
+    if boxes is not None:
         boxes = co_helper.get_real_box(boxes)
-        for box in boxes:
-            top, left, right, bottom = box
-            ball_positions.append((int(top), int(left), int(right), int(bottom)))
+        for i, box in enumerate(boxes):
+            if scores[i] > ball_conf: 
+                top, left, right, bottom = box
+                ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
     return ball_positions
 
@@ -217,7 +217,6 @@ def detect_target(frame, debug=False):
             if outputs is not None:
                 boxes, _, scores = post_process(outputs)
 
-            print(f"target scores: {scores}")
             # 判断检测是否有结果，如果有结果则保留该轮廓
             if boxes is not None and len(boxes) > 0 and max(scores) > target_conf:
                 valid_ellipses.append(contour)
