@@ -5,6 +5,7 @@ import cv2
 import os
 import threading
 import uuid
+import urllib.parse
 from network import push_data, network_check
 from kernel import detect_balls, detect_target, is_target_result_valid, build_target_status, update_target_status, \
     draw_target_boxes, draw_ball_boxes, check_target_status
@@ -171,13 +172,14 @@ class VideoProcessor:
                 if score != 0:
                     self.last_collision_time = time.time()
                     self.score_player += score
+                    encoded_mac = urllib.parse.quote(mac_address)
                     score_data = {
                         "x": ball_center[0],
                         "y": ball_center[1],
                         "score": score,
                         # TODO: 服务器那边好像目前不能接收这两个字段
-                        # "target_id": idx,
-                        # "device_id": mac_address
+                        "device_id": encoded_mac,
+                        "target_id": idx,
                     }
                     # 推送得分数据
                     push_thread = threading.Thread(
