@@ -2,6 +2,7 @@ import subprocess
 import time
 import hashlib
 import requests
+import urllib
 from constants import SALT, API_URL
 from tools import log_with_timestamp
 
@@ -28,14 +29,33 @@ def push_data(payload: dict, max_retry: int, retry_interval: int):
     success = False
 
     while retry_count <= max_retry:
+        # 在 payload 中添加时间戳和重试次数等信息
         payload['timestamp'] = int(time.time())
         payload['retry'] = retry_count
         payload['sign'] = generate_sign(payload, SALT)
 
-        log_with_timestamp(f"\033[93m推送到地址: {API_URL}\033[0m")
+        # 构建 URL 参数部分
+        query_params = {
+            "x": payload["x"],
+            "y": payload["y"],
+            "score": payload["score"],
+            "target_id": payload.get("target_id", ""),
+            "device_id": payload["device_id"],
+            "timestamp": payload["timestamp"],
+            "retry": payload["retry"],
+            "sign": payload["sign"]
+        }
+        
+        # 使用 urllib.parse.urlencode 将字典转换为查询参数格式
+        query_string = urllib.parse.urlencode(query_params)
+        
+        # 构造最终的 URL
+        url = f"{API_URL}?{query_string}"
+
+        log_with_timestamp(f"\033[93m推送到地址: {url}\033[0m")
 
         try:
-            response = requests.post(API_URL, json=payload)
+            response = requests.post(url)  # 发送 GET 请求，参数已经在 URL 中
             log_with_timestamp(f"\033[93m状态码: {response.status_code}\033[0m")
             log_with_timestamp(f"\033[93m响应内容: {response.text}\033[0m")
 
