@@ -55,7 +55,7 @@ def push_data(payload: dict, max_retry: int, retry_interval: int):
         log_with_timestamp(f"\033[93m推送到地址: {url}\033[0m")
 
         try:
-            response = requests.post(url)  # 发送 GET 请求，参数已经在 URL 中
+            response = requests.post(url, json={})  # 发送 GET 请求，参数已经在 URL 中
             log_with_timestamp(f"\033[93m状态码: {response.status_code}\033[0m")
             log_with_timestamp(f"\033[93m响应内容: {response.text}\033[0m")
 
