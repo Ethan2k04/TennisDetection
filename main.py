@@ -10,11 +10,12 @@ from network import push_data, network_check
 from kernel import detect_balls, detect_target, is_target_result_valid, build_target_status, update_target_status, \
     draw_target_boxes, draw_ball_boxes, check_target_status
 from tools import create_trackbar, save_target_to_config, log_with_timestamp, get_trackbar_values_wait_sec
-from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_ORG, FPS_SCALE, FPS_THICKNESS, HINT_1_ORG, \
-    HINT_2_ORG, HINT_3_ORG, HINT_COLOR, HINT_SCALE, HINT_THICKNESS, LOG_INVALID_COLOR, LOG_INVALID_ORG, \
-    LOG_SCALE, LOG_THICKNESS, LOG_VALID_COLOR, LOG_VALID_ORG, MAX_RETRY, RETARGET_WAIT_SEC, RETRY_INTERVAL, \
-    SCORE_COLOR, SCORE_ORG, SCORE_SCALE, SCORE_THICKNESS, SETTINGS_FILE, TITLE_COLOR, TITLE_ORG, TITLE_SCALE, \
-    TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT
+from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_THICKNESS, \
+    HINT_COLOR, HINT_SCALE, HINT_THICKNESS, LOG_INVALID_COLOR, \
+    LOG_SCALE, LOG_THICKNESS, LOG_VALID_COLOR, MAX_RETRY, RETARGET_WAIT_SEC, RETRY_INTERVAL, \
+    SCORE_COLOR, SCORE_SCALE, SCORE_THICKNESS, SETTINGS_FILE, TITLE_COLOR, TITLE_SCALE, \
+    TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT, TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO, \
+    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO
 
 
 # 获取香橙派设备的MAC地址
@@ -191,22 +192,42 @@ class VideoProcessor:
         return frame
 
     def _display_frame(self, frame) -> cv2.Mat:
+        # 获取当前屏幕的宽度和高度
+        frame_width = frame.shape[1]
+        frame_height = frame.shape[0]
+
+        # 根据比例系数计算文字的位置
+        title_org = (int(frame_width * TITLE_ORG_RATIO[0]), int(frame_height * TITLE_ORG_RATIO[1]))
+        score_org = (int(frame_width * SCORE_ORG_RATIO[0]), int(frame_height * SCORE_ORG_RATIO[1]))
+        fps_org = (int(frame_width * FPS_ORG_RATIO[0]), int(frame_height * FPS_ORG_RATIO[1]))
+        hint_1_org = (int(frame_width * HINT_1_ORG_RATIO[0]), int(frame_height * HINT_1_ORG_RATIO[1]))
+        hint_2_org = (int(frame_width * HINT_2_ORG_RATIO[0]), int(frame_height * HINT_2_ORG_RATIO[1]))
+        hint_3_org = (int(frame_width * HINT_3_ORG_RATIO[0]), int(frame_height * HINT_3_ORG_RATIO[1]))
+        log_valid_org = (int(frame_width * LOG_VALID_ORG_RATIO[0]), int(frame_height * LOG_VALID_ORG_RATIO[1]))
+        log_invalid_org = (int(frame_width * LOG_INVALID_ORG_RATIO[0]), int(frame_height * LOG_INVALID_ORG_RATIO[1]))
+
+        # 获取当前时间和帧率
         current_time = time.time()
         frame_rate = round(1 / (current_time - self.last_frame_time))
         self.last_frame_time = current_time
-        cv2.putText(frame, "TENNISv1.0", TITLE_ORG, cv2.FONT_HERSHEY_SIMPLEX, TITLE_SCALE, TITLE_COLOR, TITLE_THICKNESS)
-        cv2.putText(frame, f"Score: {self.score_player}", SCORE_ORG, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS)
-        cv2.putText(frame, f"FPS: {frame_rate}", FPS_ORG, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE, FPS_COLOR, FPS_THICKNESS)
-        cv2.putText(frame, f"Press H to retarget", HINT_1_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
-        cv2.putText(frame, f"Press J to show mask", HINT_2_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
-        cv2.putText(frame, f"Press Q to quit", HINT_3_ORG, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
+
+        # 绘制各种信息
+        cv2.putText(frame, "TENNISv1.0", title_org, cv2.FONT_HERSHEY_SIMPLEX, TITLE_SCALE, TITLE_COLOR, TITLE_THICKNESS)
+        cv2.putText(frame, f"Score: {self.score_player}", score_org, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS)
+        cv2.putText(frame, f"FPS: {frame_rate}", fps_org, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE, FPS_COLOR, FPS_THICKNESS)
+        cv2.putText(frame, f"Press H to retarget", hint_1_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
+        cv2.putText(frame, f"Press J to show mask", hint_2_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
+        cv2.putText(frame, f"Press Q to quit", hint_3_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
+        
         if self.target_manager.is_target_set:
-                cv2.putText(frame, f"[Valid] Target saved at {self.target_manager.target_saved_time}", LOG_VALID_ORG, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE, LOG_VALID_COLOR, LOG_THICKNESS)
+            cv2.putText(frame, f"[Valid] Target saved at {self.target_manager.target_saved_time}", log_valid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE, LOG_VALID_COLOR, LOG_THICKNESS)
         else:
-                cv2.putText(frame, f"[Invalid] No valid target detected. Retrying...", LOG_INVALID_ORG, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE, LOG_INVALID_COLOR, LOG_THICKNESS)
+            cv2.putText(frame, f"[Invalid] No valid target detected. Retrying...", log_invalid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE, LOG_INVALID_COLOR, LOG_THICKNESS)
+
         cv2.imshow("Video Detection", frame)
 
         return frame
+
 
     def _cleanup(self) -> None:
         self.cap.release()
