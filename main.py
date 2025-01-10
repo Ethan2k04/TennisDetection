@@ -15,7 +15,7 @@ from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_
     LOG_SCALE, LOG_THICKNESS, LOG_VALID_COLOR, MAX_RETRY, RETARGET_WAIT_SEC, RETRY_INTERVAL, \
     SCORE_COLOR, SCORE_SCALE, SCORE_THICKNESS, SETTINGS_FILE, TITLE_COLOR, TITLE_SCALE, \
     TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT, TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO, \
-    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO
+    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, DEFAULT_FRAME_WIDTH
 
 
 # 获取香橙派设备的MAC地址
@@ -195,6 +195,7 @@ class VideoProcessor:
         # 获取当前屏幕的宽度和高度
         frame_width = frame.shape[1]
         frame_height = frame.shape[0]
+        frame_scale = frame_width / DEFAULT_FRAME_WIDTH
 
         # 根据比例系数计算文字的位置
         title_org = (int(frame_width * TITLE_ORG_RATIO[0]), int(frame_height * TITLE_ORG_RATIO[1]))
@@ -212,17 +213,17 @@ class VideoProcessor:
         self.last_frame_time = current_time
 
         # 绘制各种信息
-        cv2.putText(frame, "TENNISv1.0", title_org, cv2.FONT_HERSHEY_SIMPLEX, TITLE_SCALE, TITLE_COLOR, TITLE_THICKNESS)
-        cv2.putText(frame, f"Score: {self.score_player}", score_org, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE, SCORE_COLOR, SCORE_THICKNESS)
-        cv2.putText(frame, f"FPS: {frame_rate}", fps_org, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE, FPS_COLOR, FPS_THICKNESS)
-        cv2.putText(frame, f"Press H to retarget", hint_1_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
-        cv2.putText(frame, f"Press J to show mask", hint_2_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
-        cv2.putText(frame, f"Press Q to quit", hint_3_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE, HINT_COLOR, HINT_THICKNESS)
+        cv2.putText(frame, "TENNISv1.0", title_org, cv2.FONT_HERSHEY_SIMPLEX, TITLE_SCALE * frame_scale, TITLE_COLOR, int(TITLE_THICKNESS * frame_scale))
+        cv2.putText(frame, f"Score: {self.score_player}", score_org, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE * frame_scale, SCORE_COLOR, int(SCORE_THICKNESS * frame_scale))
+        cv2.putText(frame, f"FPS: {frame_rate}", fps_org, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE * frame_scale, FPS_COLOR, int(FPS_THICKNESS * frame_scale))
+        cv2.putText(frame, f"Press H to retarget", hint_1_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
+        cv2.putText(frame, f"Press J to show mask", hint_2_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
+        cv2.putText(frame, f"Press Q to quit", hint_3_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
         
         if self.target_manager.is_target_set:
-            cv2.putText(frame, f"[Valid] Target saved at {self.target_manager.target_saved_time}", log_valid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE, LOG_VALID_COLOR, LOG_THICKNESS)
+            cv2.putText(frame, f"[Valid] Target saved at {self.target_manager.target_saved_time}", log_valid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE * frame_scale, LOG_VALID_COLOR, int(LOG_THICKNESS * frame_scale))
         else:
-            cv2.putText(frame, f"[Invalid] No valid target detected. Retrying...", log_invalid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE, LOG_INVALID_COLOR, LOG_THICKNESS)
+            cv2.putText(frame, f"[Invalid] No valid target detected. Retrying...", log_invalid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE * frame_scale, LOG_INVALID_COLOR, int(LOG_THICKNESS * frame_scale))
 
         cv2.imshow("Video Detection", frame)
 
