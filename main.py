@@ -137,7 +137,6 @@ class VideoProcessor:
 
     def process_stream(self) -> None:
         create_trackbar()
-        frame_id = 0
         while True:
             ret, frame = self.cap.read()
             self.ball_hit_sec, self.retarget_sec = get_trackbar_values_wait_sec()
@@ -147,9 +146,9 @@ class VideoProcessor:
 
             # 将帧和帧ID放入队列
             if not frame_queue.full():
-                frame_queue.put((frame, frame_id))
+                frame_queue.put(frame)
             if frame_queue.full():
-                print("FUCKING FULL")
+                print("queue is full!!!")
 
             if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
@@ -169,8 +168,6 @@ class VideoProcessor:
                 self.target_manager.force_retarget = True
             elif key & 0xFF == ord('j'):
                 self.target_manager.debug = True
-            
-            frame_id += 1
 
         self._cleanup()
 
