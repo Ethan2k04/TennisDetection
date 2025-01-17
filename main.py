@@ -147,8 +147,8 @@ class VideoProcessor:
             # 将帧和帧ID放入队列
             if not frame_queue.full():
                 frame_queue.put(frame)
-            if frame_queue.full():
-                print("queue is full!!!")
+            else:
+                log_with_timestamp("\033[93mFrame queue is full now\033[0m")
 
             if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
@@ -271,8 +271,8 @@ def main():
     server_thread.daemon = True
     server_thread.start()
 
-    # 初始化异步检测
-    async_detect_balls_init()
+    # 初始化yolo11检测进程
+    p = async_detect_balls_init()
 
     if input_path.endswith(('.mp4', '.avi', '.mov')):
         if output_path:
@@ -288,6 +288,8 @@ def main():
     else:
         print(f"Error: Unsupported file type or invalid input {input_path}")
         sys.exit(1)
+    
+    p.join()
 
 
 if __name__ == "__main__":

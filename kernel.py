@@ -3,75 +3,79 @@ import json
 import time
 import cv2
 import numpy as np
+import threading
 from sklearn.cluster import KMeans
 from yolo11 import setup_model, post_process
 from py_utils.coco_utils import COCO_test_helper
 from tools import get_trackbar_values_filter, get_trackbar_values_confidence, \
-    get_trackbar_values_morphology
+    get_trackbar_values_morphology, log_with_timestamp
 from constants import ANGLE_THRESHOLD, AREA_THRESHOLD_PERCENTAGE, BALL_COLOR, ERODE_ITER, FONT_SCALE, IMG_SIZE, \
     LINE_THICKNESS, LOWER_BLACK, MIN_DETECTION_SAMPLE, MIN_POLY, NONLINEAR_THRESHOLD, PERI_BIAS, RANDOM_STATE, \
     SETTINGS_FILE, TARGET_COLOR, TARGET_MODEL_PATH, TENNIS_MODEL_PATH, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL, \
     UPPER_WHITE, VELOCITY_RATIO_THRESHOLD
 from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
-import threading
+import multiprocessing as mp
 
 
 # yolo11 模型初始化
-model_tennis = setup_model(TENNIS_MODEL_PATH)
 model_digit = setup_model(TARGET_MODEL_PATH)
-co_helper = COCO_test_helper(enable_letter_box=True)
 
 # 用于过滤小面积噪音
 area_threshold = 0
 
-# 队列和线程池
-frame_queue = Queue(maxsize=1000)  # 用于存储帧
-result_queue = Queue(maxsize=1000)  # 用于存储结果
+# 共享队列
+manager = mp.Manager()
+frame_queue = manager.Queue(maxsize=100)  # 用于存储帧
+result_queue = manager.Queue(maxsize=100)  # 用于存储结果
 
 # 线程池
-executor = ThreadPoolExecutor(max_workers=1)
+executor = ThreadPoolExecutor(max_workers=4)
 
 def async_detect_balls_init():
     """
-    初始化异步检测任务。
+    初始化yolo11检测进程。
     """
-    def worker():
-        while True:
-            if not frame_queue.empty():
-                frame = frame_queue.get()
-                process_frame_async(frame)
-
-    executor.submit(worker)
+    p = mp.Process(target=process_frame_async)
+    p.start()
+    return p
 
 
-def process_frame_async(frame):
+def process_frame_async():
     """
     异步处理帧。
     """
-    ball_conf, _ = get_trackbar_values_confidence()
-    img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = np.expand_dims(img, axis=0)
+    model_tennis = setup_model(TENNIS_MODEL_PATH)
+    co_helper = COCO_test_helper(enable_letter_box=True)
 
-    outputs = model_tennis.run([img])
-    boxes = []
-    if outputs is not None:
-        boxes, _, scores = post_process(outputs)
+    while True:
+        if not frame_queue.empty():
+            frame = frame_queue.get()
+            ball_conf, _ = get_trackbar_values_confidence()
+            img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = np.expand_dims(img, axis=0)
+            outputs = model_tennis.run([img])
+            boxes = []
+            if outputs is not None:
+                boxes, _, scores = post_process(outputs)
 
-    ball_positions = []
-    if boxes is not None:
-        boxes = co_helper.get_real_box(boxes)
-        for i, box in enumerate(boxes):
-            if scores[i] > ball_conf:
-                top, left, right, bottom = box
-                ball_positions.append((int(top), int(left), int(right), int(bottom)))
+            ball_positions = []
+            if boxes is not None:
+                boxes = co_helper.get_real_box(boxes)
+                for i, box in enumerate(boxes):
+                    if scores[i] > ball_conf:
+                        top, left, right, bottom = box
+                        ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
-    # 把结果存储到结果队列
-    result_queue.put(ball_positions)
+            # 把结果存储到结果队列
+            if not frame_queue.full():
+                result_queue.put(ball_positions)
+            else:
+                log_with_timestamp("\033[93mResult queue is full now\033[0m")
 
 
-# # 使用yolo11检测网球（核心）
+# 使用yolo11检测网球（核心）
 # def detect_balls(frame):
 #     """
 #     使用 YOLO 检测网球，并根据检测结果绘制目标框。
@@ -461,7 +465,7 @@ def calculate_angle(v1, v2):
 
 #     return False
 
-ACCELERATION_THRESHOLD = 0.1
+ACCELERATION_THRESHOLD = 0.98
 
 # 根据网球踪迹判断是否碰撞
 def trajectory_fitting(trajectory, frame):
@@ -501,7 +505,6 @@ def trajectory_fitting(trajectory, frame):
 
     # 判断加速度是否发生突变
     for i in range(1, len(accelerations_magnitude)):
-        # print(f"index {i} acc diff: {accelerations_magnitude[i] - accelerations_magnitude[i-1]}")
         if abs(accelerations_magnitude[i] - accelerations_magnitude[i-1]) > ACCELERATION_THRESHOLD:
             return True  # 碰撞发生
 
