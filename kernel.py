@@ -12,7 +12,9 @@ from constants import ANGLE_THRESHOLD, AREA_THRESHOLD_PERCENTAGE, BALL_COLOR, ER
     LINE_THICKNESS, LOWER_BLACK, MIN_DETECTION_SAMPLE, MIN_POLY, NONLINEAR_THRESHOLD, PERI_BIAS, RANDOM_STATE, \
     SETTINGS_FILE, TARGET_COLOR, TARGET_MODEL_PATH, TENNIS_MODEL_PATH, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL, \
     UPPER_WHITE, VELOCITY_RATIO_THRESHOLD
-
+from queue import Queue
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 
 # yolo11 模型初始化
@@ -23,34 +25,75 @@ co_helper = COCO_test_helper(enable_letter_box=True)
 # 用于过滤小面积噪音
 area_threshold = 0
 
+# 队列和线程池
+frame_queue = Queue(maxsize=5)
+result_queue = Queue(maxsize=5)
+executor = ThreadPoolExecutor(max_workers=2)
 
-# 使用yolo11检测网球（核心）
-def detect_balls(frame):
+def async_detect_balls_init():
     """
-    使用 YOLO 检测网球，并根据检测结果绘制目标框。
+    初始化异步检测任务。
     """
-    # 获取检测结果
+    def worker():
+        while True:
+            if not frame_queue.empty():
+                frame = frame_queue.get()
+                process_frame_async(frame)
+
+    executor.submit(worker)
+
+
+def process_frame_async(frame):
+    """
+    异步处理帧。
+    """
     ball_conf, _ = get_trackbar_values_confidence()
     img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img = np.expand_dims(img, axis=0)
+
     outputs = model_tennis.run([img])
     boxes = []
     if outputs is not None:
         boxes, _, scores = post_process(outputs)
 
-    # 用于存储所有网球框的位置信息
     ball_positions = []
-
-    # 遍历检测结果并提取位置信息
     if boxes is not None:
         boxes = co_helper.get_real_box(boxes)
         for i, box in enumerate(boxes):
-            if scores[i] > ball_conf: 
+            if scores[i] > ball_conf:
                 top, left, right, bottom = box
                 ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
-    return ball_positions
+    result_queue.put(ball_positions)
+
+# # 使用yolo11检测网球（核心）
+# def detect_balls(frame):
+#     """
+#     使用 YOLO 检测网球，并根据检测结果绘制目标框。
+#     """
+#     # 获取检测结果
+#     ball_conf, _ = get_trackbar_values_confidence()
+#     img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
+#     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#     img = np.expand_dims(img, axis=0)
+#     outputs = model_tennis.run([img])
+#     boxes = []
+#     if outputs is not None:
+#         boxes, _, scores = post_process(outputs)
+
+#     # 用于存储所有网球框的位置信息
+#     ball_positions = []
+
+#     # 遍历检测结果并提取位置信息
+#     if boxes is not None:
+#         boxes = co_helper.get_real_box(boxes)
+#         for i, box in enumerate(boxes):
+#             if scores[i] > ball_conf: 
+#                 top, left, right, bottom = box
+#                 ball_positions.append((int(top), int(left), int(right), int(bottom)))
+
+#     return ball_positions
 
 
 # 根据检测结果绘制网球目标框

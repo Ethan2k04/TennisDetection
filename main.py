@@ -16,6 +16,7 @@ from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_
     SCORE_COLOR, SCORE_SCALE, SCORE_THICKNESS, SETTINGS_FILE, TITLE_COLOR, TITLE_SCALE, \
     TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT, TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO, \
     HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, DEFAULT_FRAME_WIDTH
+from kernel import frame_queue, result_queue, async_detect_balls_init
 
 
 # 获取香橙派设备的MAC地址
@@ -105,10 +106,7 @@ class VideoProcessor:
         self.cap = cv2.VideoCapture(input_source)
 
         # ---{解决帧率问题开始}---
-        self.cap.open(0, cv2.CAP_DSHOW)       # 我这里0为电脑自带摄像头，1为外接相机
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1900)      # 解决问题的关键！！！
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
         self.cap.set(cv2.CAP_PROP_FPS, 60)
         # ---{解决帧率问题结束}---
 
@@ -142,6 +140,9 @@ class VideoProcessor:
                 log_with_timestamp("\033[93mEnd of video or failed to grab frame\033[0m")
                 break
 
+            if not frame_queue.full():
+                frame_queue.put(frame)
+
             if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
                     config = json.load(file)
@@ -164,7 +165,10 @@ class VideoProcessor:
         self._cleanup()
 
     def _update_score(self, frame) -> cv2.Mat:
-        ball_result = detect_balls(frame)
+        ball_result = []
+        if not result_queue.empty():
+            ball_result = result_queue.get()
+
         with open(CONFIG_FILE, 'r') as file:
             config = json.load(file)
 
@@ -261,6 +265,9 @@ def main():
     server_thread = threading.Thread(target=network_check)
     server_thread.daemon = True
     server_thread.start()
+
+    # 初始化异步检测
+    async_detect_balls_init()
 
     if input_path.endswith(('.mp4', '.avi', '.mov')):
         if output_path:
