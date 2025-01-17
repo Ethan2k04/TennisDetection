@@ -15,9 +15,12 @@ from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_
     LOG_SCALE, LOG_THICKNESS, LOG_VALID_COLOR, MAX_RETRY, RETARGET_WAIT_SEC, RETRY_INTERVAL, \
     SCORE_COLOR, SCORE_SCALE, SCORE_THICKNESS, SETTINGS_FILE, TITLE_COLOR, TITLE_SCALE, \
     TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT, TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO, \
-    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, DEFAULT_FRAME_WIDTH
+    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, DEFAULT_FRAME_WIDTH, IMG_SIZE
 from kernel import frame_queue, result_queue, async_detect_balls_init
-
+import multiprocessing as mp
+import numpy as np
+from kernel import model_tennis, co_helper
+from yolo11 import setup_model, post_process
 
 # 获取香橙派设备的MAC地址
 mac = uuid.getnode()
@@ -135,7 +138,7 @@ class VideoProcessor:
         else:
             self.video_writer = None
 
-    def process_stream(self) -> None:
+    def process_stream(self, frame_queue, result_queue) -> None:
         create_trackbar()
         while True:
             ret, frame = self.cap.read()
@@ -155,7 +158,7 @@ class VideoProcessor:
                     self.config = json.load(file)
                     self.target_status = build_target_status(self.config)
 
-            frame = self._update_score(frame)
+            frame = self._update_score(frame, frame_queue, result_queue)
             frame = self._display_frame(frame)
 
             if self.video_writer:
@@ -171,7 +174,7 @@ class VideoProcessor:
 
         self._cleanup()
 
-    def _update_score(self, frame) -> cv2.Mat:
+    def _update_score(self, frame, frame_queue, result_queue) -> cv2.Mat:
         ball_result = []
         if not result_queue.empty():
             ball_result = result_queue.get()
@@ -256,7 +259,7 @@ class VideoProcessor:
 
 
 # 主函数
-def main():
+def main_proc(frame_queue, result_queue):
     if len(sys.argv) < 2:
         print("Usage: python3 main.py <video_path or image_path or 0 for stream> [output_path (optional)]")
         sys.exit(1)
@@ -271,26 +274,59 @@ def main():
     server_thread.daemon = True
     server_thread.start()
 
-    # 初始化yolo11检测进程
-    p = async_detect_balls_init()
-
     if input_path.endswith(('.mp4', '.avi', '.mov')):
         if output_path:
             processor = VideoProcessor(input_source=input_path, output_path=output_path)
         else:
             processor = VideoProcessor(input_source=input_path)
-        processor.process_stream()
+        processor.process_stream(frame_queue, result_queue)
     elif input_path.endswith(('.jpg', '.png', '.jpeg')):
         print("Image processing not implemented yet")
     elif input_path == "0":
         processor = VideoProcessor(input_source=0)
-        processor.process_stream()
+        processor.process_stream(frame_queue, result_queue)
     else:
         print(f"Error: Unsupported file type or invalid input {input_path}")
         sys.exit(1)
-    
-    p.join()
+
+
+def detect_proc(frame_queue, result_queue):
+    while True:
+        if not frame_queue.empty():
+            frame = frame_queue.get()
+            ball_conf, _ =  0.1 # get_trackbar_values_confidence()
+            img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = np.expand_dims(img, axis=0)
+            outputs = model_tennis.run([img])
+            boxes = []
+            if outputs is not None:
+                boxes, _, scores = post_process(outputs)
+
+            ball_positions = []
+            if boxes is not None:
+                boxes = co_helper.get_real_box(boxes)
+                for i, box in enumerate(boxes):
+                    if scores[i] > ball_conf:
+                        top, left, right, bottom = box
+                        ball_positions.append((int(top), int(left), int(right), int(bottom)))
+
+            # 把结果存储到结果队列
+            if not frame_queue.full():
+                result_queue.put(ball_positions)
+            else:
+                log_with_timestamp("\033[93mResult queue is full now\033[0m")
 
 
 if __name__ == "__main__":
-    main()
+    frame_queue = mp.Queue()
+    result_queue = mp.Queue()
+    
+    main_process = mp.Process(target=main_proc, args=(frame_queue, result_queue))
+    detect_process = mp.Process(target=detect_proc, args=(frame_queue, result_queue))
+
+    main_process.start()
+    detect_process.start()
+
+    main_process.join()
+    detect_process.join()
