@@ -15,11 +15,10 @@ from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_
     LOG_SCALE, LOG_THICKNESS, LOG_VALID_COLOR, MAX_RETRY, RETARGET_WAIT_SEC, RETRY_INTERVAL, \
     SCORE_COLOR, SCORE_SCALE, SCORE_THICKNESS, SETTINGS_FILE, TITLE_COLOR, TITLE_SCALE, \
     TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT, TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO, \
-    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, DEFAULT_FRAME_WIDTH, IMG_SIZE
-from kernel import frame_queue, result_queue, async_detect_balls_init
+    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, DEFAULT_FRAME_WIDTH, IMG_SIZE, TENNIS_MODEL_PATH
 import multiprocessing as mp
 import numpy as np
-from kernel import model_tennis, co_helper
+from py_utils.coco_utils import COCO_test_helper
 from yolo11 import setup_model, post_process
 
 # 获取香橙派设备的MAC地址
@@ -291,13 +290,17 @@ def main_proc(frame_queue, result_queue):
 
 
 def detect_proc(frame_queue, result_queue):
+    model_tennis = setup_model(TENNIS_MODEL_PATH)
+    co_helper = COCO_test_helper(enable_letter_box=True)
     while True:
         if not frame_queue.empty():
+            print("FUCK")
             frame = frame_queue.get()
-            ball_conf, _ =  0.1 # get_trackbar_values_confidence()
+            ball_conf = 0.1 # get_trackbar_values_confidence()
             img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img = np.expand_dims(img, axis=0)
+            print("SHIT")
             outputs = model_tennis.run([img])
             boxes = []
             if outputs is not None:

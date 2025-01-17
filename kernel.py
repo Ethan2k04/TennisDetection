@@ -17,8 +17,6 @@ from constants import ANGLE_THRESHOLD, AREA_THRESHOLD_PERCENTAGE, BALL_COLOR, ER
 
 # yolo11 模型初始化
 model_digit = setup_model(TARGET_MODEL_PATH)
-model_tennis = setup_model(TENNIS_MODEL_PATH)
-co_helper = COCO_test_helper(enable_letter_box=True)
 
 # 用于过滤小面积噪音
 area_threshold = 0
