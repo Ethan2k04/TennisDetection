@@ -7,7 +7,7 @@ from sklearn.cluster import KMeans
 from yolo11 import setup_model, post_process
 from py_utils.coco_utils import COCO_test_helper
 from tools import get_trackbar_values_filter, get_trackbar_values_confidence, \
-    get_trackbar_values_morphology
+    get_trackbar_values_morphology, set_trackbar_values_filter
 from constants import ANGLE_THRESHOLD, AREA_THRESHOLD_PERCENTAGE, BALL_COLOR, ERODE_ITER, FONT_SCALE, IMG_SIZE, \
     LINE_THICKNESS, LOWER_BLACK, MIN_DETECTION_SAMPLE, MIN_POLY, NONLINEAR_THRESHOLD, PERI_BIAS, RANDOM_STATE, \
     SETTINGS_FILE, TARGET_COLOR, TARGET_MODEL_PATH, TENNIS_MODEL_PATH, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL, \
@@ -23,6 +23,19 @@ co_helper = COCO_test_helper(enable_letter_box=True)
 # 用于过滤小面积噪音
 area_threshold = 0
 
+# 从元信息中读取参数
+num_cls = 0
+num_target = 0
+score_list = []
+if os.path.exists(SETTINGS_FILE):
+    with open(SETTINGS_FILE, 'r') as file:
+        settings = json.load(file)
+
+    num_cls = settings["num_cls"]
+    score_list = settings["score_list"]
+    num_target = settings["num_target"]
+
+current_target_count = 0
 
 # 使用yolo11检测网球（核心）
 def detect_balls(frame):
@@ -76,9 +89,36 @@ def filter_target_color(frame):
     通过动态更新的 HSV 范围筛选黑色和白色。
     """
     # 获取当前滑块的值，更新 V 范围
-    upper_black, lower_white, = get_trackbar_values_filter()
+    upper_black, lower_white = get_trackbar_values_filter()
 
-    # 转换为 HSV 色彩范围
+    # 计算目标数目与期望数目之间的差异
+    target_diff = abs(current_target_count - num_target)
+
+    # 根据差异调节upper_black和lower_white
+    step_size = 2  # 初始步长
+
+    # 如果目标数目偏离期望值较远，增加调节步长
+    if target_diff > num_target * 0.2:  # 例如，超过20%的偏差
+        step_size = 5
+    # 如果目标数目接近期望值，则逐渐减小步长，避免过度调整
+    elif target_diff < num_target * 0.05:  # 例如，偏差小于5%时
+        step_size = 1
+
+    # 调节upper_black和lower_white
+    if current_target_count < num_target:
+        upper_black += step_size  # 增大upper_black
+        lower_white -= step_size  # 减小lower_white
+    elif current_target_count > num_target:
+        upper_black -= step_size  # 减小upper_black
+        lower_white += step_size  # 增加lower_white
+
+    # 确保upper_black和lower_white在合理范围内
+    upper_black = min(255, max(upper_black, LOWER_BLACK))  # upper_black最大为255，最小为LOWER_BLACK
+    lower_white = min(255, max(lower_white, 0))  # lower_white最大为255，最小为0
+
+    set_trackbar_values_filter(upper_black, lower_white)
+
+    # 返回调节后的mask
     hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
     # 筛选黑色和白色像素
@@ -229,24 +269,15 @@ def detect_target(frame, debug=False):
     # 识别的标靶结果
     result = {"undef": []}
 
-    # 从元信息中读取参数
-    num_cls = 0
-    num_target = 0
-    score_list = []
-    if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, 'r') as file:
-            settings = json.load(file)
-
-        num_cls = settings["num_cls"]
-        score_list = settings["score_list"]
-        num_target = settings["num_target"]
-
     # 聚类目标面积
     cluster = cluster_target(area_list, num_cls)
 
     # 识别的标靶结果
     for score in score_list:
         result[str(score)] = []
+
+    global current_target_count
+    current_target_count = len(valid_ellipses)
 
     if is_target_result_valid(cluster, num_target):
         for contour in valid_ellipses:
@@ -364,57 +395,6 @@ def calculate_angle(v1, v2):
     return angle_degrees
 
 
-# # 根据网球踪迹判断是否碰撞
-# def trajectory_fitting(trajectory, frame):
-#     """
-#     根据trajectory轨迹判断是否发生碰撞
-#     """
-#     x = trajectory[:, 0]
-#     y = trajectory[:, 1]
-
-#     # 绘制轨迹点
-#     for xi, yi in zip(x, y):
-#         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
-
-#      # 若没有足够的点进行计算（使用线性拟合）
-#     if len(trajectory) <= MIN_DETECTION_SAMPLE:
-#         coeffs = np.polyfit(x, y, 1)
-#         residuals = np.sum((np.polyval(coeffs, x) - y) ** 2) / len(x)
-#         # print(f"res: {residuals}")
-#         if residuals > NONLINEAR_THRESHOLD:
-#             return True
-#     # 若有足够的点进行计算（使用突变点检测）
-#     else:
-#         # 计算速度方向变化的突变点
-#         velocity_change_points = []
-#         for i in range(1, len(trajectory) - 1):
-#             v1 = np.array([x[i] - x[i-1], y[i] - y[i-1]])
-#             v2 = np.array([x[i+1] - x[i], y[i+1] - y[i]])
-#             v1_norm = np.linalg.norm(v1)
-#             v2_norm = np.linalg.norm(v2)
-#             if v1_norm > 0 and v2_norm > 0:
-#                 ratio = v1_norm / v2_norm
-#                 if ratio > VELOCITY_RATIO_THRESHOLD:
-#                     velocity_change_points.append(i)
-
-#         # 如果没有速度突变点，则返回False
-#         if not velocity_change_points:
-#             return False
-
-#         # 对每个速度突变点之前和之后的点序列进行距离计算
-#         for change_point in velocity_change_points:
-#             before_point = trajectory[change_point - 1]
-#             after_point = trajectory[change_point + 1]
-#             v_before = np.array(trajectory[change_point]) - np.array(before_point)
-#             v_after = np.array(after_point) - np.array(trajectory[change_point])
-#             angle = calculate_angle(v_before, v_after)
-#             if angle > ANGLE_THRESHOLD and angle < 180 - ANGLE_THRESHOLD:
-#                 return True
-
-#     return False
-
-ACCELERATION_THRESHOLD = 0.1
-
 # 根据网球踪迹判断是否碰撞
 def trajectory_fitting(trajectory, frame):
     """
@@ -427,33 +407,40 @@ def trajectory_fitting(trajectory, frame):
     for xi, yi in zip(x, y):
         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
-    # 计算一阶差分（速度）和二阶差分（加速度）
-    velocities = []
-    accelerations = []
+     # 若没有足够的点进行计算（使用线性拟合）
+    if len(trajectory) <= MIN_DETECTION_SAMPLE:
+        coeffs = np.polyfit(x, y, 1)
+        residuals = np.sum((np.polyval(coeffs, x) - y) ** 2) / len(x)
+        # print(f"res: {residuals}")
+        if residuals > NONLINEAR_THRESHOLD:
+            return True
+    # 若有足够的点进行计算（使用突变点检测）
+    else:
+        # 计算速度方向变化的突变点
+        velocity_change_points = []
+        for i in range(1, len(trajectory) - 1):
+            v1 = np.array([x[i] - x[i-1], y[i] - y[i-1]])
+            v2 = np.array([x[i+1] - x[i], y[i+1] - y[i]])
+            v1_norm = np.linalg.norm(v1)
+            v2_norm = np.linalg.norm(v2)
+            if v1_norm > 0 and v2_norm > 0:
+                ratio = v1_norm / v2_norm
+                if ratio > VELOCITY_RATIO_THRESHOLD:
+                    velocity_change_points.append(i)
 
-    for i in range(1, len(trajectory) - 1):
-        # 计算速度（两点之间的位移）
-        v1 = np.array([x[i] - x[i-1], y[i] - y[i-1]])  # 速度 v1
-        v2 = np.array([x[i+1] - x[i], y[i+1] - y[i]])  # 速度 v2
-        velocity = v2  # 速度变化量
-        velocities.append(velocity)
+        # 如果没有速度突变点，则返回False
+        if not velocity_change_points:
+            return False
 
-        # 计算加速度（速度的变化）
-        if i > 1:
-            acceleration = v2 - v1  # 加速度是速度的变化
-            accelerations.append(acceleration)
-
-    # 打印速度和加速度数组，方便调试
-    velocities_magnitude = [np.linalg.norm(v) for v in velocities]
-    accelerations_magnitude = [np.linalg.norm(a) for a in accelerations]
-
-    print(f"Velocities: {velocities_magnitude}")
-    print(f"Accelerations: {accelerations_magnitude}")
-
-    # 判断加速度是否发生突变
-    for i in range(1, len(accelerations_magnitude)):
-        if abs(accelerations_magnitude[i] - accelerations_magnitude[i-1]) > ACCELERATION_THRESHOLD:
-            return True  # 碰撞发生
+        # 对每个速度突变点之前和之后的点序列进行距离计算
+        for change_point in velocity_change_points:
+            before_point = trajectory[change_point - 1]
+            after_point = trajectory[change_point + 1]
+            v_before = np.array(trajectory[change_point]) - np.array(before_point)
+            v_after = np.array(after_point) - np.array(trajectory[change_point])
+            angle = calculate_angle(v_before, v_after)
+            if angle > ANGLE_THRESHOLD and angle < 180 - ANGLE_THRESHOLD:
+                return True
 
     return False
 

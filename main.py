@@ -26,7 +26,7 @@ mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8)
 # 目标管理类
 class TargetManager:
     def __init__(self):
-        self.is_target_set = False
+        self.is_target_set = True
         self.last_relocate_time = time.time()
         self.target_saved_time = time.strftime('%Y-%m-%d %H:%M:%S')
         self.num_target = 0
@@ -103,6 +103,15 @@ class TargetManager:
 class VideoProcessor:
     def __init__(self, input_source=0, output_path=None):
         self.cap = cv2.VideoCapture(input_source)
+
+        # ---{解决帧率问题开始}---
+        self.cap.open(0, cv2.CAP_DSHOW)       # 我这里0为电脑自带摄像头，1为外接相机
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1900)      # 解决问题的关键！！！
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        self.cap.set(cv2.CAP_PROP_FPS, 60)
+        # ---{解决帧率问题结束}---
+
         if not self.cap.isOpened():
             raise RuntimeError(f"Unable to access input source: {input_source}")
 
