@@ -146,11 +146,7 @@ class VideoProcessor:
                 log_with_timestamp("\033[93mEnd of video or failed to grab frame\033[0m")
                 break
 
-            # 将帧和帧ID放入队列
-            if not frame_queue.full():
-                frame_queue.put(frame)
-            else:
-                log_with_timestamp("\033[93mFrame queue is full now\033[0m")
+            frame_queue.put(frame)
 
             if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
@@ -175,8 +171,7 @@ class VideoProcessor:
 
     def _update_score(self, frame, frame_queue, result_queue) -> cv2.Mat:
         ball_result = []
-        if not result_queue.empty():
-            ball_result = result_queue.get()
+        ball_result = result_queue.get()
 
         frame = draw_ball_boxes(frame, ball_result)
         frame = draw_target_boxes(frame, self.config)
@@ -293,32 +288,26 @@ def detect_proc(frame_queue, result_queue):
     model_tennis = setup_model(TENNIS_MODEL_PATH)
     co_helper = COCO_test_helper(enable_letter_box=True)
     while True:
-        if not frame_queue.empty():
-            print("FUCK")
-            frame = frame_queue.get()
-            ball_conf = 0.1 # get_trackbar_values_confidence()
-            img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = np.expand_dims(img, axis=0)
-            print("SHIT")
-            outputs = model_tennis.run([img])
-            boxes = []
-            if outputs is not None:
-                boxes, _, scores = post_process(outputs)
+        frame = frame_queue.get()
+        ball_conf = 0.1 # get_trackbar_values_confidence()
+        img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = np.expand_dims(img, axis=0)
+        outputs = model_tennis.run([img])
+        boxes = []
+        if outputs is not None:
+            boxes, _, scores = post_process(outputs)
 
-            ball_positions = []
-            if boxes is not None:
-                boxes = co_helper.get_real_box(boxes)
-                for i, box in enumerate(boxes):
-                    if scores[i] > ball_conf:
-                        top, left, right, bottom = box
-                        ball_positions.append((int(top), int(left), int(right), int(bottom)))
+        ball_positions = []
+        if boxes is not None:
+            boxes = co_helper.get_real_box(boxes)
+            for i, box in enumerate(boxes):
+                if scores[i] > ball_conf:
+                    top, left, right, bottom = box
+                    ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
-            # 把结果存储到结果队列
-            if not frame_queue.full():
-                result_queue.put(ball_positions)
-            else:
-                log_with_timestamp("\033[93mResult queue is full now\033[0m")
+        # 把结果存储到结果队列
+        result_queue.put(ball_positions)
 
 
 if __name__ == "__main__":
@@ -326,6 +315,7 @@ if __name__ == "__main__":
     result_queue = mp.Queue()
     
     main_process = mp.Process(target=main_proc, args=(frame_queue, result_queue))
+    main_process.daemon = True
     detect_process = mp.Process(target=detect_proc, args=(frame_queue, result_queue))
 
     main_process.start()
