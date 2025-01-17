@@ -24,11 +24,15 @@ co_helper = COCO_test_helper(enable_letter_box=True)
 
 # 用于过滤小面积噪音
 area_threshold = 0
-
 # 队列和线程池
-frame_queue = Queue(maxsize=1)
-result_queue = Queue(maxsize=1)
+frame_queue = Queue(maxsize=5)  # 用于存储帧
+result_queue = Queue(maxsize=5)  # 用于存储结果
+
+# 线程池
 executor = ThreadPoolExecutor(max_workers=4)
+
+# 时间戳缓冲区
+buffer = {}
 
 def async_detect_balls_init():
     """
@@ -37,13 +41,13 @@ def async_detect_balls_init():
     def worker():
         while True:
             if not frame_queue.empty():
-                frame = frame_queue.get()
-                process_frame_async(frame)
+                frame, frame_id = frame_queue.get()
+                process_frame_async(frame, frame_id)
 
     executor.submit(worker)
 
 
-def process_frame_async(frame):
+def process_frame_async(frame, frame_id):
     """
     异步处理帧。
     """
@@ -65,7 +69,23 @@ def process_frame_async(frame):
                 top, left, right, bottom = box
                 ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
-    result_queue.put(ball_positions)
+    # 把结果和时间戳一起存储
+    buffer[frame_id] = ball_positions
+    process_result()
+
+
+def process_result():
+    """
+    确保按时间顺序提交检测结果。
+    """
+    # 获取已处理的时间戳顺序
+    sorted_ids = sorted(buffer.keys())
+    
+    for frame_id in sorted_ids:
+        # 按照顺序从缓冲区提取结果
+        result = buffer.pop(frame_id)
+        # 结果提交到result_queue
+        result_queue.put((frame_id, result))
 
 # # 使用yolo11检测网球（核心）
 # def detect_balls(frame):
