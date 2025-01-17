@@ -24,12 +24,13 @@ co_helper = COCO_test_helper(enable_letter_box=True)
 
 # 用于过滤小面积噪音
 area_threshold = 0
+
 # 队列和线程池
-frame_queue = Queue(maxsize=5)  # 用于存储帧
-result_queue = Queue(maxsize=5)  # 用于存储结果
+frame_queue = Queue(maxsize=100)  # 用于存储帧
+result_queue = Queue(maxsize=100)  # 用于存储结果
 
 # 线程池
-executor = ThreadPoolExecutor(max_workers=4)
+executor = ThreadPoolExecutor(max_workers=2)
 
 # 时间戳缓冲区
 buffer = {}
@@ -85,7 +86,7 @@ def process_result():
         # 按照顺序从缓冲区提取结果
         result = buffer.pop(frame_id)
         # 结果提交到result_queue
-        result_queue.put((frame_id, result))
+        result_queue.put(result)
 
 # # 使用yolo11检测网球（核心）
 # def detect_balls(frame):
@@ -427,7 +428,7 @@ def calculate_angle(v1, v2):
     return angle_degrees
 
 
-# # 根据网球踪迹判断是否碰撞
+# 根据网球踪迹判断是否碰撞
 # def trajectory_fitting(trajectory, frame):
 #     """
 #     根据trajectory轨迹判断是否发生碰撞
@@ -436,6 +437,7 @@ def calculate_angle(v1, v2):
 #     y = trajectory[:, 1]
 
 #     # 绘制轨迹点
+#     print(f"traj: {trajectory}")
 #     for xi, yi in zip(x, y):
 #         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
@@ -487,6 +489,7 @@ def trajectory_fitting(trajectory, frame):
     y = trajectory[:, 1]
 
     # 绘制轨迹点
+    print(f"traj: {trajectory}")
     for xi, yi in zip(x, y):
         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
@@ -515,6 +518,7 @@ def trajectory_fitting(trajectory, frame):
 
     # 判断加速度是否发生突变
     for i in range(1, len(accelerations_magnitude)):
+        # print(f"index {i} acc diff: {accelerations_magnitude[i] - accelerations_magnitude[i-1]}")
         if abs(accelerations_magnitude[i] - accelerations_magnitude[i-1]) > ACCELERATION_THRESHOLD:
             return True  # 碰撞发生
 

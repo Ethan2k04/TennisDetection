@@ -122,9 +122,13 @@ class VideoProcessor:
         self.last_frame_time = time.time()
         self.ball_timestamps = {}
         self.target_status = {}
+        self.config = {}
         self.last_collision_time = time.time()
         self.ball_hit_sec = BALL_HIT_WAIT_SEC
         self.retarget_sec = RETARGET_WAIT_SEC
+        with open(CONFIG_FILE, 'r') as file:
+            self.config = json.load(file)
+            self.target_status = build_target_status(self.config)
         if self.output_path:
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             self.video_writer = cv2.VideoWriter(self.output_path, fourcc, self.fps, (self.frame_width, self.frame_height))
@@ -144,11 +148,13 @@ class VideoProcessor:
             # 将帧和帧ID放入队列
             if not frame_queue.full():
                 frame_queue.put((frame, frame_id))
+            if frame_queue.full():
+                print("FUCKING FULL")
 
             if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
-                    config = json.load(file)
-                    self.target_status = build_target_status(config)
+                    self.config = json.load(file)
+                    self.target_status = build_target_status(self.config)
 
             frame = self._update_score(frame)
             frame = self._display_frame(frame)
@@ -171,13 +177,10 @@ class VideoProcessor:
     def _update_score(self, frame) -> cv2.Mat:
         ball_result = []
         if not result_queue.empty():
-            frame_id, ball_result = result_queue.get()
-
-        with open(CONFIG_FILE, 'r') as file:
-            config = json.load(file)
+            ball_result = result_queue.get()
 
         frame = draw_ball_boxes(frame, ball_result)
-        frame = draw_target_boxes(frame, config)
+        frame = draw_target_boxes(frame, self.config)
 
         if len(self.target_status.keys()) > 0:
             ball_center = (0, 0)
