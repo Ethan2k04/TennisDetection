@@ -26,9 +26,9 @@ co_helper = COCO_test_helper(enable_letter_box=True)
 area_threshold = 0
 
 # 队列和线程池
-frame_queue = Queue(maxsize=5)
-result_queue = Queue(maxsize=5)
-executor = ThreadPoolExecutor(max_workers=2)
+frame_queue = Queue(maxsize=1)
+result_queue = Queue(maxsize=1)
+executor = ThreadPoolExecutor(max_workers=4)
 
 def async_detect_balls_init():
     """

@@ -7,7 +7,7 @@ import threading
 import uuid
 import urllib.parse
 from network import push_data, network_check
-from kernel import detect_balls, detect_target, is_target_result_valid, build_target_status, update_target_status, \
+from kernel import detect_target, is_target_result_valid, build_target_status, update_target_status, \
     draw_target_boxes, draw_ball_boxes, check_target_status
 from tools import create_trackbar, save_target_to_config, log_with_timestamp, get_trackbar_values_wait_sec
 from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_THICKNESS, \
@@ -191,7 +191,6 @@ class VideoProcessor:
                         "x": ball_center[0],
                         "y": ball_center[1],
                         "score": score,
-                        # TODO: 服务器那边好像目前不能接收这两个字段
                         "device_id": encoded_mac,
                         "target_id": idx,
                     }
@@ -210,6 +209,8 @@ class VideoProcessor:
         frame_height = frame.shape[0]
         frame_scale = frame_width / DEFAULT_FRAME_WIDTH
 
+        frame_cpy = frame.copy()
+
         # 根据比例系数计算文字的位置
         title_org = (int(frame_width * TITLE_ORG_RATIO[0]), int(frame_height * TITLE_ORG_RATIO[1]))
         score_org = (int(frame_width * SCORE_ORG_RATIO[0]), int(frame_height * SCORE_ORG_RATIO[1]))
@@ -226,19 +227,19 @@ class VideoProcessor:
         self.last_frame_time = current_time
 
         # 绘制各种信息
-        cv2.putText(frame, "TENNISv1.0", title_org, cv2.FONT_HERSHEY_SIMPLEX, TITLE_SCALE * frame_scale, TITLE_COLOR, int(TITLE_THICKNESS * frame_scale))
-        cv2.putText(frame, f"Score: {self.score_player}", score_org, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE * frame_scale, SCORE_COLOR, int(SCORE_THICKNESS * frame_scale))
-        cv2.putText(frame, f"FPS: {frame_rate}", fps_org, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE * frame_scale, FPS_COLOR, int(FPS_THICKNESS * frame_scale))
-        cv2.putText(frame, f"Press H to retarget", hint_1_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
-        cv2.putText(frame, f"Press J to show mask", hint_2_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
-        cv2.putText(frame, f"Press Q to quit", hint_3_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
+        cv2.putText(frame_cpy, "TENNISv1.0", title_org, cv2.FONT_HERSHEY_SIMPLEX, TITLE_SCALE * frame_scale, TITLE_COLOR, int(TITLE_THICKNESS * frame_scale))
+        cv2.putText(frame_cpy, f"Score: {self.score_player}", score_org, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE * frame_scale, SCORE_COLOR, int(SCORE_THICKNESS * frame_scale))
+        cv2.putText(frame_cpy, f"FPS: {frame_rate}", fps_org, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE * frame_scale, FPS_COLOR, int(FPS_THICKNESS * frame_scale))
+        cv2.putText(frame_cpy, f"Press H to retarget", hint_1_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
+        cv2.putText(frame_cpy, f"Press J to show mask", hint_2_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
+        cv2.putText(frame_cpy, f"Press Q to quit", hint_3_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
         
         if self.target_manager.is_target_set:
-            cv2.putText(frame, f"[Valid] Target saved at {self.target_manager.target_saved_time}", log_valid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE * frame_scale, LOG_VALID_COLOR, int(LOG_THICKNESS * frame_scale))
+            cv2.putText(frame_cpy, f"[Valid] Target saved at {self.target_manager.target_saved_time}", log_valid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE * frame_scale, LOG_VALID_COLOR, int(LOG_THICKNESS * frame_scale))
         else:
-            cv2.putText(frame, f"[Invalid] No valid target detected. Retrying...", log_invalid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE * frame_scale, LOG_INVALID_COLOR, int(LOG_THICKNESS * frame_scale))
+            cv2.putText(frame_cpy, f"[Invalid] No valid target detected. Retrying...", log_invalid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE * frame_scale, LOG_INVALID_COLOR, int(LOG_THICKNESS * frame_scale))
 
-        cv2.imshow("Video Detection", frame)
+        cv2.imshow("Video Detection", frame_cpy)
 
         return frame
 
