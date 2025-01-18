@@ -19,6 +19,7 @@ from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_
 import multiprocessing as mp
 import numpy as np
 
+
 # 获取香橙派设备的MAC地址
 mac = uuid.getnode()
 mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8))
@@ -248,7 +249,7 @@ class VideoProcessor:
 
         return frame
 
-
+            
     def _cleanup(self) -> None:
         self.cap.release()
         if self.video_writer:
@@ -256,8 +257,8 @@ class VideoProcessor:
         cv2.destroyAllWindows()
 
 
-# 主函数
-def main_proc(frame_queue, result_queue):
+# 摄像头进程
+def cam_proc(frame_queue, result_queue):
     if len(sys.argv) < 2:
         print("Usage: python3 main.py <video_path or image_path or 0 for stream> [output_path (optional)]")
         sys.exit(1)
@@ -288,23 +289,55 @@ def main_proc(frame_queue, result_queue):
         sys.exit(1)
 
 
+# yolo11检测进程
+# def detect_proc(frame_queue, result_queue):
+#     from py_utils.coco_utils import COCO_test_helper
+#     from yolo11 import setup_model, post_process
+#     model_tennis = setup_model(TENNIS_MODEL_PATH)
+#     co_helper = COCO_test_helper(enable_letter_box=True)
+#     while True:
+#         frame = frame_queue.get()
+#         if frame is None:
+#             continue
+#         ball_conf = 0.2 # get_trackbar_values_confidence()
+#         img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
+#         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#         cv2.imshow("img", img)
+#         cv2.waitKey(10)
+#         img = np.expand_dims(img, axis=0)
+#         outputs = model_tennis.run([img])
+#         boxes = []
+#         if outputs is not None:
+#             boxes, _, scores = post_process(outputs)
+
+#         ball_positions = []
+#         if boxes is not None:
+#             boxes = co_helper.get_real_box(boxes)
+#             for i, box in enumerate(boxes):
+#                 if scores[i] > ball_conf:
+#                     top, left, right, bottom = box
+#                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
+
+#         # 把结果存储到结果队列
+#         if not result_queue.full():
+#             result_queue.put(ball_positions)
+
+# yolo11检测进程
 def detect_proc(frame_queue, result_queue):
     from py_utils.coco_utils import COCO_test_helper
     from yolo11 import setup_model, post_process
-    model_tennis = setup_model(TENNIS_MODEL_PATH)
-    co_helper = COCO_test_helper(enable_letter_box=True)
-    while True:
-        frame = frame_queue.get()
-        if frame is None:
-            continue
-        # cv2.imshow("sub proc", frame)
-        ball_conf = 0.2 # get_trackbar_values_confidence()
+
+    # 定义 YOLO 模型初始化方法
+    def init_model():
+        return setup_model(TENNIS_MODEL_PATH)
+
+    def process_frame(frame, model):
+        co_helper = COCO_test_helper(enable_letter_box=True)
+        ball_conf = 0.2  # get_trackbar_values_confidence()
         img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        cv2.imshow("img", img)
-        cv2.waitKey(10)
         img = np.expand_dims(img, axis=0)
-        outputs = model_tennis.run([img])
+        outputs = model.run([img])
         boxes = []
         if outputs is not None:
             boxes, _, scores = post_process(outputs)
@@ -317,18 +350,39 @@ def detect_proc(frame_queue, result_queue):
                     top, left, right, bottom = box
                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
-        # 把结果存储到结果队列
-        if not result_queue.full():
-            result_queue.put(ball_positions)
+        return ball_positions
 
+    def worker():
+        model = init_model()
+        while True:
+            frame = frame_queue.get()
+            if frame is None:
+                continue
+            ball_positions = process_frame(frame, model)
+            if not result_queue.full():
+                result_queue.put(ball_positions)
+
+    # 启动多个线程进行检测
+    num_threads = 4  # 可以根据需要调整线程数
+    threads = []
+    for _ in range(num_threads):
+        thread = threading.Thread(target=worker)
+        thread.daemon = True
+        thread.start()
+        threads.append(thread)
+
+    # 等待线程结束
+    for thread in threads:
+        thread.join()
+        
 
 if __name__ == "__main__":
     frame_queue = mp.Queue(maxsize=1000)
     result_queue = mp.Queue(maxsize=100)
 
-    main_process = mp.Process(target=main_proc, args=(frame_queue, result_queue))
-    main_process.start()
+    cam_process = mp.Process(target=cam_proc, args=(frame_queue, result_queue))
+    cam_process.start()
 
     detect_proc(frame_queue, result_queue)
 
-    main_process.join()
+    cam_process.join()
