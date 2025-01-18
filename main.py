@@ -18,8 +18,6 @@ from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_
     HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, DEFAULT_FRAME_WIDTH, IMG_SIZE, TENNIS_MODEL_PATH
 import multiprocessing as mp
 import numpy as np
-from py_utils.coco_utils import COCO_test_helper
-from yolo11 import setup_model, post_process
 
 # 获取香橙派设备的MAC地址
 mac = uuid.getnode()
@@ -141,12 +139,14 @@ class VideoProcessor:
         create_trackbar()
         while True:
             ret, frame = self.cap.read()
+            raw_frame = frame.copy()
             self.ball_hit_sec, self.retarget_sec = get_trackbar_values_wait_sec()
             if not ret:
                 log_with_timestamp("\033[93mEnd of video or failed to grab frame\033[0m")
                 break
-
-            frame_queue.put(frame)
+            
+            if not frame_queue.full():
+                frame_queue.put(raw_frame)
 
             if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
@@ -171,7 +171,11 @@ class VideoProcessor:
 
     def _update_score(self, frame, frame_queue, result_queue) -> cv2.Mat:
         ball_result = []
-        ball_result = result_queue.get()
+        if result_queue.empty():
+            frame = draw_target_boxes(frame, self.config)
+            return frame
+        if not result_queue.empty():
+            ball_result = result_queue.get()
 
         frame = draw_ball_boxes(frame, ball_result)
         frame = draw_target_boxes(frame, self.config)
@@ -285,13 +289,20 @@ def main_proc(frame_queue, result_queue):
 
 
 def detect_proc(frame_queue, result_queue):
+    from py_utils.coco_utils import COCO_test_helper
+    from yolo11 import setup_model, post_process
     model_tennis = setup_model(TENNIS_MODEL_PATH)
     co_helper = COCO_test_helper(enable_letter_box=True)
     while True:
         frame = frame_queue.get()
-        ball_conf = 0.1 # get_trackbar_values_confidence()
+        if frame is None:
+            continue
+        # cv2.imshow("sub proc", frame)
+        ball_conf = 0.2 # get_trackbar_values_confidence()
         img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        cv2.imshow("img", img)
+        cv2.waitKey(10)
         img = np.expand_dims(img, axis=0)
         outputs = model_tennis.run([img])
         boxes = []
@@ -307,19 +318,17 @@ def detect_proc(frame_queue, result_queue):
                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
         # 把结果存储到结果队列
-        result_queue.put(ball_positions)
+        if not result_queue.full():
+            result_queue.put(ball_positions)
 
 
 if __name__ == "__main__":
-    frame_queue = mp.Queue()
-    result_queue = mp.Queue()
-    
-    main_process = mp.Process(target=main_proc, args=(frame_queue, result_queue))
-    main_process.daemon = True
-    detect_process = mp.Process(target=detect_proc, args=(frame_queue, result_queue))
+    frame_queue = mp.Queue(maxsize=1000)
+    result_queue = mp.Queue(maxsize=100)
 
+    main_process = mp.Process(target=main_proc, args=(frame_queue, result_queue))
     main_process.start()
-    detect_process.start()
+
+    detect_proc(frame_queue, result_queue)
 
     main_process.join()
-    detect_process.join()
