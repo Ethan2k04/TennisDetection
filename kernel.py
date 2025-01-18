@@ -75,15 +75,19 @@ def filter_target_color(frame):
 
     # 获取当前滑块的值，更新 V 范围
     upper_black, lower_white, = get_trackbar_values_filter()
-    
+
     # 根据平均亮度修正阈值
     # 例如，如果亮度较高，则认为背景较亮，调整为更小的upper_black和更大的lower_white
     if average_brightness > 128:
-        upper_black = upper_black * 1.2  # 调高黑色的上限
-        lower_white = lower_white * 1.2  # 调低白色的下限
+        upper_black[-1] = int(upper_black[-1] * 1.2)  # 调高黑色的上限
+        lower_white[-1] = int(lower_white[-1] * 1.2)  # 调低白色的下限
     else:
-        upper_black = upper_black * 0.8  # 调低黑色的上限
-        lower_white = lower_white * 0.8  # 调高白色的下限
+        upper_black[-1] = int(upper_black[-1] * 0.8)  # 调低黑色的上限
+        lower_white[-1] = int(lower_white[-1] * 0.8)  # 调高白色的下限
+    
+    print(f"brightness: {average_brightness}")
+    print(f"lower_white: {lower_white}")
+    print(f"upper_black: {upper_black}")
 
 
     # 转换为 HSV 色彩范围
