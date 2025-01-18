@@ -42,7 +42,7 @@ class TargetManager:
 
     def relocate_target(self, frame, retarget_wait_sec: float) -> bool:
         if (not self.is_target_set or self.force_retarget) and time.time() - self.last_relocate_time > retarget_wait_sec:
-            target_result = detect_target(frame, self.debug)
+            target_result = [] # detect_target(frame, self.debug)
             self.last_relocate_time = time.time()
             if is_target_result_valid(target_result, self.num_target):
                 self.target_data = self._parse_target_result(target_result)
@@ -333,7 +333,7 @@ def detect_proc(frame_queue, result_queue):
 
     def process_frame(frame, model):
         co_helper = COCO_test_helper(enable_letter_box=True)
-        ball_conf = 0.2  # get_trackbar_values_confidence()
+        ball_conf = 0.5  # get_trackbar_values_confidence()
         img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = np.expand_dims(img, axis=0)
@@ -377,12 +377,13 @@ def detect_proc(frame_queue, result_queue):
         
 
 if __name__ == "__main__":
-    frame_queue = mp.Queue(maxsize=1000)
+    frame_queue = mp.Queue(maxsize=100)
     result_queue = mp.Queue(maxsize=100)
 
     cam_process = mp.Process(target=cam_proc, args=(frame_queue, result_queue))
+    detect_process = mp.Process(target=detect_proc, args=(frame_queue, result_queue))
     cam_process.start()
-
-    detect_proc(frame_queue, result_queue)
+    detect_process.start()
 
     cam_process.join()
+    detect_process.join()

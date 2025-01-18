@@ -15,9 +15,6 @@ from constants import ANGLE_THRESHOLD, AREA_THRESHOLD_PERCENTAGE, BALL_COLOR, ER
     UPPER_WHITE, VELOCITY_RATIO_THRESHOLD
 
 
-# yolo11 模型初始化
-model_digit = setup_model(TARGET_MODEL_PATH)
-
 # 用于过滤小面积噪音
 area_threshold = 0
 
@@ -158,6 +155,10 @@ def detect_target(frame, debug=False):
     """
     检测 frame 中的标靶轮廓，返回字典结果
     """
+
+    # yolo11 模型初始化
+    model_digit = setup_model(TARGET_MODEL_PATH)
+
     # 获取 trackbar 设定的参数
     refine_ksize, erode_ksize = get_trackbar_values_morphology()
 

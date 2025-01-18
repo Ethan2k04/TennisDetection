@@ -1,5 +1,5 @@
 {
-  "num_cls": 3,
-  "score_list": [30, 20, 10],
-  "num_target": 6
+  "num_cls": 1,
+  "score_list": [20],
+  "num_target": 1
 }
