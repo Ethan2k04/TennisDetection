@@ -15,9 +15,12 @@ from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_
     LOG_SCALE, LOG_THICKNESS, LOG_VALID_COLOR, MAX_RETRY, RETARGET_WAIT_SEC, RETRY_INTERVAL, \
     SCORE_COLOR, SCORE_SCALE, SCORE_THICKNESS, SETTINGS_FILE, TITLE_COLOR, TITLE_SCALE, \
     TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT, TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO, \
-    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, DEFAULT_FRAME_WIDTH, IMG_SIZE, TENNIS_MODEL_PATH
+    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, DEFAULT_FRAME_WIDTH, IMG_SIZE, TENNIS_MODEL_PATH, \
+    TARGET_MODEL_PATH
 import multiprocessing as mp
 import numpy as np
+from py_utils.coco_utils import COCO_test_helper
+from yolo11 import setup_model, post_process
 
 
 # 获取香橙派设备的MAC地址
@@ -35,6 +38,8 @@ class TargetManager:
         self.target_data = {}
         self.force_retarget = False
         self.debug = False
+        self.model = setup_model(TARGET_MODEL_PATH)
+        self.co_helper = COCO_test_helper(enable_letter_box=True)
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, 'r') as file:
                 settings = json.load(file)
@@ -42,7 +47,7 @@ class TargetManager:
 
     def relocate_target(self, frame, retarget_wait_sec: float) -> bool:
         if (not self.is_target_set or self.force_retarget) and time.time() - self.last_relocate_time > retarget_wait_sec:
-            target_result = [] # detect_target(frame, self.debug)
+            target_result = detect_target(frame, self.model, self.co_helper, self.debug)
             self.last_relocate_time = time.time()
             if is_target_result_valid(target_result, self.num_target):
                 self.target_data = self._parse_target_result(target_result)
@@ -324,8 +329,6 @@ def cam_proc(frame_queue, result_queue):
 
 # yolo11检测进程
 def detect_proc(frame_queue, result_queue):
-    from py_utils.coco_utils import COCO_test_helper
-    from yolo11 import setup_model, post_process
 
     # 定义 YOLO 模型初始化方法
     def init_model():

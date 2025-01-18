@@ -151,14 +151,10 @@ def is_ellipse(contour):
 
 
 # 检测目标轮廓（核心）
-def detect_target(frame, debug=False):
+def detect_target(frame, model_digit, co_helper, debug=False):
     """
     检测 frame 中的标靶轮廓，返回字典结果
     """
-
-    # yolo11 模型初始化
-    model_digit = setup_model(TARGET_MODEL_PATH)
-
     # 获取 trackbar 设定的参数
     refine_ksize, erode_ksize = get_trackbar_values_morphology()
 
