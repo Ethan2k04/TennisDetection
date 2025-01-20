@@ -64,225 +64,94 @@ def draw_ball_boxes(frame, ball_positions):
     return frame
 
 
+# Gamma校正
 def gamma_correction(image, gamma=1.0):
     invGamma = 1.0 / gamma
     table = np.array([((i / 255.0) ** invGamma) * 255 for i in range(256)]).astype("uint8")
     return cv2.LUT(image, table)
 
-
-# 筛选出标靶颜色
-def filter_target_color(frame):
+# 判断轮廓是否为圆形
+def is_circle(contour):
     """
-    通过动态更新的 HSV 范围筛选黑色和白色，并进行亮度修正。
+    根据轮廓点判断轮廓是否为类圆形
     """
-    # 在检测靶子之前，修正图像的亮度
-    # 计算图像的平均亮度并根据亮度进行Gamma校正
-    hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    average_brightness = np.mean(hsv_frame[:, :, 2])
+    if len(contour) < MIN_POLY:
+        return False
 
-    # 选择Gamma值调整亮度
-    if average_brightness > 128:
-        frame = gamma_correction(frame, gamma=0.8)  # 亮度较高时，减少亮度
-    else:
-        frame = gamma_correction(frame, gamma=1.2)  # 亮度较低时，增加亮度
+    # 拟合椭圆
+    ellipse = cv2.fitEllipse(contour)
+    (x, y), (major_axis, minor_axis), angle = ellipse
 
-    # 获取当前滑块的值，更新 V 范围
-    upper_black, lower_white = get_trackbar_values_filter()
+    # 计算圆度（长轴和短轴的比例）
+    circularity = minor_axis / major_axis if major_axis != 0 else 0
 
-    # 根据平均亮度修正阈值
-    if average_brightness > 128:
-        upper_black[-1] = int(upper_black[-1] * 1.2)  # 调高黑色的上限
-        lower_white[-1] = int(lower_white[-1] * 1.2)  # 调低白色的下限
-    else:
-        upper_black[-1] = int(upper_black[-1] * 0.8)  # 调低黑色的上限
-        lower_white[-1] = int(lower_white[-1] * 0.8)  # 调高白色的下限
-    
-    print(f"brightness: {average_brightness}")
-    print(f"lower_white: {lower_white}")
-    print(f"upper_black: {upper_black}")
+    # 圆度接近1且面积大于一定阈值
+    return circularity > 0.8 and cv2.contourArea(contour) > 100
 
-    # 转换为 HSV 色彩范围
-    hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+# 检测目标轮廓
+def detect_target(frame, model_digit, co_helper, debug=False):
+    """
+    检测 frame 中的圆形轮廓，并识别中间的数字
+    """
+    # 转换为灰度图像
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    # 筛选黑色和白色像素
-    mask_black = cv2.inRange(hsv_frame, LOWER_BLACK, upper_black)
-    mask_white = cv2.inRange(hsv_frame, lower_white, UPPER_WHITE)
+    # 高斯模糊降噪
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # 合并黑色和白色的掩码
-    mask = cv2.bitwise_or(mask_black, mask_white)
-    return mask
+    # 边缘检测
+    edges = cv2.Canny(blurred, 50, 150)
 
+    # 查找轮廓
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-# 对检测到的标靶进行聚类分析
+    # 筛选圆形轮廓
+    circles = [contour for contour in contours if is_circle(contour)]
+
+    # 用于保存符合条件的轮廓
+    valid_circles = []
+
+    # 遍历圆形轮廓并进行数字识别
+    for contour in circles:
+        x, y, w, h = cv2.boundingRect(contour)
+        cropped_region = frame[y: y + h, x: x + w]
+
+        # 使用YOLO模型进行数字识别
+        img = co_helper.letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = np.expand_dims(img, axis=0)
+        outputs = model_digit.run([img])
+        if outputs is not None:
+            boxes, _, scores = post_process(outputs)
+
+        # 判断检测是否有结果，如果有结果则保留该轮廓
+        if boxes is not None and len(boxes) > 0 and max(scores) > 0.5:  # 置信度阈值
+            valid_circles.append(contour)
+
+    # 返回结果
+    result = {"targets": valid_circles}
+    return result
+
+# 聚类分析
 def cluster_target(data, n_clusters):
     """
     对检出的标靶大小进行聚类，根据聚类结果判定标靶类型
     """
-    # 转为 NumPy 数组
     data = np.array(data).reshape(-1, 1)
-
-    # 使用 K-Means 聚类
     clusters = {}
     if len(data) >= n_clusters:
         kmeans = KMeans(n_clusters=n_clusters, random_state=RANDOM_STATE).fit(data)
         labels = kmeans.labels_
         centers = kmeans.cluster_centers_
 
-        # 将数据和聚类结果对应
         clusters = {i: [] for i in range(n_clusters)}
         for value, label in zip(data.flatten(), labels):
             clusters[label].append(value)
 
-        # 按中心值对簇排序
         sorted_clusters = sorted(clusters.items(), key=lambda x: centers[x[0]])
-
-        # 重新分配 keys，并对每个簇的 values 排序
         clusters = {i: sorted(values) for i, (_, values) in enumerate(sorted_clusters)}
 
-    # 返回结果
     return clusters
-
-
-# 判断轮廓是不是椭圆形
-def is_ellipse(contour):
-    """
-    根据轮廓点判断轮廓是否为类椭圆形
-    """
-    # 如果轮廓点数小于 MIN_POLY，则不可能是椭圆
-    if len(contour) < MIN_POLY:
-        return False
-
-    # 拟合椭圆并计算相关属性
-    ellipse = cv2.fitEllipse(contour)
-    peri = cv2.arcLength(contour, True)  # 计算轮廓的周长
-    (x, y), (major_axis, minor_axis), angle = ellipse
-    area = cv2.contourArea(contour)
-
-    # 如果面积为零，直接返回 False
-    if area == 0:
-        return False
-
-    # 使用 Ramanujan 的第二公式计算椭圆的周长
-    a = major_axis / 2  # 长轴半径
-    b = minor_axis / 2  # 短轴半径
-    ellipse_peri = np.pi * (3 * (a + b) - np.sqrt((3 * a + b) * (a + 3 * b)))
-
-    # 计算周长比率，接近1说明轮廓较规则
-    peri_ratio = peri / ellipse_peri
-
-    # 使用多边形逼近轮廓，排除常见的非椭圆形状（如三角形、四边形等）
-    approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
-
-    # 筛选椭圆条件
-    is_valid_ellipse = abs(peri_ratio - 1) < PERI_BIAS and len(approx) > MIN_POLY
-
-    return is_valid_ellipse
-
-
-# 检测目标轮廓（核心）
-def detect_target(frame, model_digit, co_helper, debug=False):
-    """
-    检测 frame 中的标靶轮廓，返回字典结果
-    """
-    # 获取 trackbar 设定的参数
-    refine_ksize, erode_ksize = get_trackbar_values_morphology()
-
-    # 过滤目标颜色并精细化掩膜
-    mask = filter_target_color(frame)
-    mask = refine_mask(mask, refine_ksize)
-
-    # 查找轮廓
-    contours, _ = cv2.findContours(mask, cv2.MORPH_ELLIPSE, cv2.CHAIN_APPROX_NONE)
-
-    # 创建一个空白掩膜，用于存放选中的轮廓区域
-    new_mask = np.zeros_like(mask)  # 初始掩膜全为0
-
-    # 遍历所有轮廓，并填充相应区域
-    for contour in contours:
-        # 在每个轮廓区域填充1
-        cv2.drawContours(new_mask, [contour], -1, 255, thickness=cv2.FILLED)  # 填充轮廓区域
-
-    # 使用腐蚀操作进行降噪
-    kernel = np.ones((erode_ksize, erode_ksize), np.uint8)
-    mask = cv2.erode(new_mask, kernel, iterations = ERODE_ITER)
-
-    # =================================================== #
-    if debug:
-        cv2.imshow("target_mask", mask)   # 调试用
-    # =================================================== #
-
-    contours, _ = cv2.findContours(mask, cv2.MORPH_ELLIPSE, cv2.CHAIN_APPROX_NONE)
-
-    # 识别符合条件的椭圆
-    ellipses = [contour for contour in contours if is_ellipse(contour)]
-
-    # 用于保存符合 YOLO 检测条件的轮廓
-    valid_ellipses = []
-
-    # 遍历椭圆轮廓并进行 YOLO 检测
-    for contour in ellipses:
-        global area_threshold
-        if cv2.contourArea(contour) > area_threshold:
-            # 获取轮廓的边界框
-            x, y, w, h = cv2.boundingRect(contour)
-            cropped_region = frame[y: y + h, x: x + w]
-
-            # =================================================== #
-            # cv2.imshow("cropped_region", cropped_region)  # 调试用
-            # =================================================== #
-
-            # 使用YOLO模型进行检测
-            _, target_conf = get_trackbar_values_confidence()
-            img = co_helper.letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = np.expand_dims(img, axis=0)
-            outputs = model_digit.run([img])
-            if outputs is not None:
-                boxes, _, scores = post_process(outputs)
-
-            # 判断检测是否有结果，如果有结果则保留该轮廓
-            if boxes is not None and len(boxes) > 0 and max(scores) > target_conf:
-                valid_ellipses.append(contour)
-
-    # 计算所有有效椭圆的面积并排序
-    area_list = sorted([cv2.contourArea(contour) for contour in valid_ellipses])
-    if len(area_list) > 0:
-        area_threshold = max(area_list) / AREA_THRESHOLD_PERCENTAGE
-
-    # 识别的标靶结果
-    result = {"undef": []}
-
-    # 从元信息中读取参数
-    num_cls = 0
-    num_target = 0
-    score_list = []
-    if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, 'r') as file:
-            settings = json.load(file)
-
-        num_cls = settings["num_cls"]
-        score_list = settings["score_list"]
-        num_target = settings["num_target"]
-
-    # 聚类目标面积
-    cluster = cluster_target(area_list, num_cls)
-
-    # 识别的标靶结果
-    for score in score_list:
-        result[str(score)] = []
-
-    if is_target_result_valid(cluster, num_target):
-        for contour in valid_ellipses:
-            contour_area = cv2.contourArea(contour)
-            for i in range(len(score_list)):
-                if len(cluster[i]) > 0:
-                    if min(cluster[i]) <= contour_area <= max(cluster[i]):
-                        result[str(score_list[i])].append(contour)
-
-        return result
-    else:
-        result["undef"] = valid_ellipses
-        return result
 
 
 # 根据检测结果绘制标靶目标框
