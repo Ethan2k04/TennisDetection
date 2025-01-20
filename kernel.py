@@ -63,14 +63,32 @@ def detect_target(frame, model_digit, co_helper, debug=False):
         if area < 100:  # 根据需要调整最小面积阈值
             continue
 
-        # 保存检测到的轮廓及其面积
-        detected_contours.append((contour, area))
+        # 检查轮廓点的数量是否足够拟合椭圆
+        if len(contour) >= 5:  # 至少需要 5 个点
+            # 将轮廓点转换为 NumPy 数组，确保形状为 (N, 1, 2)
+            contour_points = np.array(contour, dtype=np.float32)
+
+            # 拟合椭圆
+            try:
+                (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour_points)
+                detected_contours.append({
+                    "contour": contour_points,
+                    "area": area,
+                    "center": (int(x), int(y)),
+                    "major_axis": major_axis,
+                    "minor_axis": minor_axis,
+                    "angle": angle
+                })
+            except cv2.error as e:
+                if debug:
+                    print(f"拟合椭圆失败: {e}")
+                continue
 
     # 如果有检测到的轮廓，选择面积最大的 6 个作为结果类
     result_contours = []
     if len(detected_contours) > 0:
         # 将检测到的轮廓按面积从大到小排序
-        sorted_contours = sorted(detected_contours, key=lambda x: x[1], reverse=True)  # 按面积从大到小排序
+        sorted_contours = sorted(detected_contours, key=lambda x: x["area"], reverse=True)  # 按面积从大到小排序
 
         # 选择面积最大的 6 个轮廓作为结果类
         result_contours = sorted_contours[:6]
