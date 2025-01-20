@@ -18,35 +18,6 @@ from constants import ANGLE_THRESHOLD, AREA_THRESHOLD_PERCENTAGE, BALL_COLOR, ER
 # 用于过滤小面积噪音
 area_threshold = 0
 
-# 使用yolo11检测网球（核心）
-# def detect_balls(frame):
-#     """
-#     使用 YOLO 检测网球，并根据检测结果绘制目标框。
-#     """
-#     # 获取检测结果
-#     ball_conf, _ = get_trackbar_values_confidence()
-#     img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
-#     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-#     img = np.expand_dims(img, axis=0)
-#     outputs = model_tennis.run([img])
-#     boxes = []
-#     if outputs is not None:
-#         boxes, _, scores = post_process(outputs)
-
-#     # 用于存储所有网球框的位置信息
-#     ball_positions = []
-
-#     # 遍历检测结果并提取位置信息
-#     if boxes is not None:
-#         boxes = co_helper.get_real_box(boxes)
-#         for i, box in enumerate(boxes):
-#             if scores[i] > ball_conf: 
-#                 top, left, right, bottom = box
-#                 ball_positions.append((int(top), int(left), int(right), int(bottom)))
-
-#     return ball_positions
-
-
 # 根据检测结果绘制网球目标框
 def draw_ball_boxes(frame, ball_positions):
     """
@@ -63,35 +34,10 @@ def draw_ball_boxes(frame, ball_positions):
 
     return frame
 
-
-# Gamma校正
-def gamma_correction(image, gamma=1.0):
-    invGamma = 1.0 / gamma
-    table = np.array([((i / 255.0) ** invGamma) * 255 for i in range(256)]).astype("uint8")
-    return cv2.LUT(image, table)
-
-# 判断轮廓是否为圆形
-def is_circle(contour):
-    """
-    根据轮廓点判断轮廓是否为类圆形
-    """
-    if len(contour) < MIN_POLY:
-        return False
-
-    # 拟合椭圆
-    ellipse = cv2.fitEllipse(contour)
-    (x, y), (major_axis, minor_axis), angle = ellipse
-
-    # 计算圆度（长轴和短轴的比例）
-    circularity = minor_axis / major_axis if major_axis != 0 else 0
-
-    # 圆度接近1且面积大于一定阈值
-    return circularity > 0.8 and cv2.contourArea(contour) > 100
-
 # 检测目标轮廓
 def detect_target(frame, model_digit, co_helper, debug=False):
     """
-    检测 frame 中的圆形轮廓，并识别中间的数字
+    检测 frame 中的椭圆轮廓，并选择面积最大的 6 个椭圆作为目标。
     """
     # 转换为灰度图像
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -105,54 +51,33 @@ def detect_target(frame, model_digit, co_helper, debug=False):
     # 查找轮廓
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    # 筛选圆形轮廓
-    circles = [contour for contour in contours if is_circle(contour)]
+    # 用于存储检测到的轮廓及其面积
+    detected_contours = []
 
-    # 用于保存符合条件的轮廓
-    valid_circles = []
+    # 遍历轮廓
+    for contour in contours:
+        # 计算轮廓面积
+        area = cv2.contourArea(contour)
 
-    # 遍历圆形轮廓并进行数字识别
-    for contour in circles:
-        x, y, w, h = cv2.boundingRect(contour)
-        cropped_region = frame[y: y + h, x: x + w]
+        # 过滤掉太小的轮廓
+        if area < 100:  # 根据需要调整最小面积阈值
+            continue
 
-        # 使用YOLO模型进行数字识别
-        img = co_helper.letter_box(im=cropped_region.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = np.expand_dims(img, axis=0)
-        outputs = model_digit.run([img])
-        if outputs is not None:
-            boxes, _, scores = post_process(outputs)
+        # 保存检测到的轮廓及其面积
+        detected_contours.append((contour, area))
 
-        # 判断检测是否有结果，如果有结果则保留该轮廓
-        if boxes is not None and len(boxes) > 0 and max(scores) > 0.5:  # 置信度阈值
-            valid_circles.append(contour)
+    # 如果有检测到的轮廓，选择面积最大的 6 个作为结果类
+    result_contours = []
+    if len(detected_contours) > 0:
+        # 将检测到的轮廓按面积从大到小排序
+        sorted_contours = sorted(detected_contours, key=lambda x: x[1], reverse=True)  # 按面积从大到小排序
+
+        # 选择面积最大的 6 个轮廓作为结果类
+        result_contours = sorted_contours[:6]
 
     # 返回结果
-    result = {"targets": valid_circles}
+    result = {"targets": result_contours}
     return result
-
-# 聚类分析
-def cluster_target(data, n_clusters):
-    """
-    对检出的标靶大小进行聚类，根据聚类结果判定标靶类型
-    """
-    data = np.array(data).reshape(-1, 1)
-    clusters = {}
-    if len(data) >= n_clusters:
-        kmeans = KMeans(n_clusters=n_clusters, random_state=RANDOM_STATE).fit(data)
-        labels = kmeans.labels_
-        centers = kmeans.cluster_centers_
-
-        clusters = {i: [] for i in range(n_clusters)}
-        for value, label in zip(data.flatten(), labels):
-            clusters[label].append(value)
-
-        sorted_clusters = sorted(clusters.items(), key=lambda x: centers[x[0]])
-        clusters = {i: sorted(values) for i, (_, values) in enumerate(sorted_clusters)}
-
-    return clusters
-
 
 # 根据检测结果绘制标靶目标框
 def draw_target_boxes(frame, config):
@@ -176,7 +101,6 @@ def draw_target_boxes(frame, config):
 
     return frame
 
-
 # 构建靶标内网球识别状态
 def build_target_status(config):
     """
@@ -199,7 +123,6 @@ def build_target_status(config):
 
     return target_status
 
-
 # 更新靶标内网球识别状态
 def update_target_status(target_status, ball_center):
     """
@@ -221,7 +144,6 @@ def update_target_status(target_status, ball_center):
 
     return target_status
 
-
 # 检查每个靶标内的网球轨迹状态
 def check_target_status(target_status, frame):
     """
@@ -239,11 +161,9 @@ def check_target_status(target_status, frame):
 
     return False, 0, None
 
-
 # 计算点与点之间的欧几里得距离
 def calculate_distance(p1, p2):
     return np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
-
 
 # 计算两个向量的夹角（返回角度）
 def calculate_angle(v1, v2):
@@ -254,57 +174,6 @@ def calculate_angle(v1, v2):
     angle_radians = np.arccos(np.clip(cos_theta, -1.0, 1.0))
     angle_degrees = np.degrees(angle_radians)
     return angle_degrees
-
-
-# 根据网球踪迹判断是否碰撞
-# def trajectory_fitting(trajectory, frame):
-#     """
-#     根据trajectory轨迹判断是否发生碰撞
-#     """
-#     x = trajectory[:, 0]
-#     y = trajectory[:, 1]
-
-#     # 绘制轨迹点
-#     print(f"traj: {trajectory}")
-#     for xi, yi in zip(x, y):
-#         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
-
-#      # 若没有足够的点进行计算（使用线性拟合）
-#     if len(trajectory) <= MIN_DETECTION_SAMPLE:
-#         coeffs = np.polyfit(x, y, 1)
-#         residuals = np.sum((np.polyval(coeffs, x) - y) ** 2) / len(x)
-#         # print(f"res: {residuals}")
-#         if residuals > NONLINEAR_THRESHOLD:
-#             return True
-#     # 若有足够的点进行计算（使用突变点检测）
-#     else:
-#         # 计算速度方向变化的突变点
-#         velocity_change_points = []
-#         for i in range(1, len(trajectory) - 1):
-#             v1 = np.array([x[i] - x[i-1], y[i] - y[i-1]])
-#             v2 = np.array([x[i+1] - x[i], y[i+1] - y[i]])
-#             v1_norm = np.linalg.norm(v1)
-#             v2_norm = np.linalg.norm(v2)
-#             if v1_norm > 0 and v2_norm > 0:
-#                 ratio = v1_norm / v2_norm
-#                 if ratio > VELOCITY_RATIO_THRESHOLD:
-#                     velocity_change_points.append(i)
-
-#         # 如果没有速度突变点，则返回False
-#         if not velocity_change_points:
-#             return False
-
-#         # 对每个速度突变点之前和之后的点序列进行距离计算
-#         for change_point in velocity_change_points:
-#             before_point = trajectory[change_point - 1]
-#             after_point = trajectory[change_point + 1]
-#             v_before = np.array(trajectory[change_point]) - np.array(before_point)
-#             v_after = np.array(after_point) - np.array(trajectory[change_point])
-#             angle = calculate_angle(v_before, v_after)
-#             if angle > ANGLE_THRESHOLD and angle < 180 - ANGLE_THRESHOLD:
-#                 return True
-
-#     return False
 
 ACCELERATION_THRESHOLD = 0.98
 
@@ -351,7 +220,6 @@ def trajectory_fitting(trajectory, frame):
 
     return False
 
-
 # 对输入的 mask 进行形态学优化操作
 def refine_mask(mask, ksize):
     """
@@ -363,7 +231,6 @@ def refine_mask(mask, ksize):
 
     return mask
 
-
 # 判断目标结果集合是否符合设定
 def is_target_result_valid(target_result, num_target):
     """
@@ -372,7 +239,6 @@ def is_target_result_valid(target_result, num_target):
     total_length = sum(len(v) for k, v in target_result.items() if k != "undef")
     return total_length == num_target and all(
         len(v) > 0 for k, v in target_result.items() if k != "undef")
-
 
 # 释放资源
 def destruct():
