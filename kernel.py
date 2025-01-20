@@ -64,20 +64,32 @@ def draw_ball_boxes(frame, ball_positions):
     return frame
 
 
+def gamma_correction(image, gamma=1.0):
+    invGamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** invGamma) * 255 for i in range(256)]).astype("uint8")
+    return cv2.LUT(image, table)
+
+
 # 筛选出标靶颜色
 def filter_target_color(frame):
     """
-    通过动态更新的 HSV 范围筛选黑色和白色。
+    通过动态更新的 HSV 范围筛选黑色和白色，并进行亮度修正。
     """
-    # 计算图像的平均亮度
+    # 在检测靶子之前，修正图像的亮度
+    # 计算图像的平均亮度并根据亮度进行Gamma校正
     hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     average_brightness = np.mean(hsv_frame[:, :, 2])
 
+    # 选择Gamma值调整亮度
+    if average_brightness > 128:
+        frame = gamma_correction(frame, gamma=0.8)  # 亮度较高时，减少亮度
+    else:
+        frame = gamma_correction(frame, gamma=1.2)  # 亮度较低时，增加亮度
+
     # 获取当前滑块的值，更新 V 范围
-    upper_black, lower_white, = get_trackbar_values_filter()
+    upper_black, lower_white = get_trackbar_values_filter()
 
     # 根据平均亮度修正阈值
-    # 例如，如果亮度较高，则认为背景较亮，调整为更小的upper_black和更大的lower_white
     if average_brightness > 128:
         upper_black[-1] = int(upper_black[-1] * 1.2)  # 调高黑色的上限
         lower_white[-1] = int(lower_white[-1] * 1.2)  # 调低白色的下限
@@ -88,7 +100,6 @@ def filter_target_color(frame):
     print(f"brightness: {average_brightness}")
     print(f"lower_white: {lower_white}")
     print(f"upper_black: {upper_black}")
-
 
     # 转换为 HSV 色彩范围
     hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
