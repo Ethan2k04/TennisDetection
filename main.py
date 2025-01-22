@@ -9,7 +9,7 @@ import urllib.parse
 from network import push_data, network_check
 from kernel import detect_target, is_target_result_valid, build_target_status, update_target_status, \
     draw_target_boxes, draw_ball_boxes, check_target_status
-from tools import create_trackbar, save_target_to_config, log_with_timestamp
+from tools import save_target_to_config, log_with_timestamp
 import multiprocessing as mp
 import numpy as np
 from py_utils.coco_utils import COCO_test_helper
@@ -142,7 +142,6 @@ class VideoProcessor:
             self.video_writer = None
 
     def process_stream(self, frame_queue, result_queue) -> None:
-        create_trackbar()
         while True:
             ret, frame = self.cap.read()
             raw_frame = frame.copy()
@@ -188,7 +187,8 @@ class VideoProcessor:
             ball_center = (0, 0)
             for _, ball in enumerate(ball_result):
                 ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
-                update_target_status(self.target_status, ball_center)
+                ball_size = int(abs(ball[0] - ball[2])) * int(abs(ball[1] -ball[3]))
+                update_target_status(self.target_status, ball_center, ball_size)
 
             collision_detected, score, idx = check_target_status(self.target_status, frame)
             if collision_detected and abs(time.time() - self.last_collision_time > self.ball_hit_sec):

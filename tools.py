@@ -35,11 +35,6 @@ def create_trackbar():
     cv2.createTrackbar("BALL_HIT_WAIT_SEC", "Trackbars", int(BALL_HIT_WAIT_SEC * 100), 100, nothing)
     cv2.createTrackbar("RETARGET_WAIT_SEC", "Trackbars", int(BALL_HIT_WAIT_SEC * 100), 100, nothing)
 
-def set_trackbar_values_filter(UP_V_BlACK, LOW_V_WHITE):
-    # 设置滑块的值
-    cv2.setTrackbarPos("UP_V_BLACK", "Trackbars", UP_V_BlACK)
-    cv2.setTrackbarPos("LOW_V_WHITE", "Trackbars", LOW_V_WHITE)
-
 def get_trackbar_values_morphology():
     refine_ksize = cv2.getTrackbarPos("REFINE_KSIZE", "Trackbars")
     erode_ksize = cv2.getTrackbarPos("ERODE_KSIZE", "Trackbars")

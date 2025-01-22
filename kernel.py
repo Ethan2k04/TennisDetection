@@ -4,7 +4,7 @@ import time
 import cv2
 import numpy as np
 from constants import BALL_COLOR, FONT_SCALE, LINE_THICKNESS, MIN_POLY, SETTINGS_FILE,\
-      TARGET_COLOR, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL, ACCELERATION_THRESHOLD
+      TARGET_COLOR, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL
 
 
 # 从元信息中读取参数
@@ -131,6 +131,7 @@ def build_target_status(config):
             "height": target_height,
             "score": 0 if value["cls"] == "undef" else int(value["cls"]),
             "trajectory": [],
+            "size": [],
             "has_ball": False,
             "last_update_time": time.time(),
         }
@@ -138,7 +139,7 @@ def build_target_status(config):
     return target_status
 
 # 更新靶标内网球识别状态
-def update_target_status(target_status, ball_center):
+def update_target_status(target_status, ball_center, ball_size):
     """
     根据网球位置更新状态列表
     """
@@ -154,6 +155,7 @@ def update_target_status(target_status, ball_center):
         if ((ball_center[0] - target_center[0]) ** 2) / a ** 2 + ((ball_center[1] - target_center[1]) ** 2) / b ** 2 <= 1:
             status["last_update_time"] = time.time()
             status["trajectory"].append(ball_center)
+            status["size"].append(ball_size)
             status["has_ball"] = True
 
     return target_status
@@ -167,8 +169,9 @@ def check_target_status(target_status, frame):
         status = target_status[key]
         global index
         if time.time() - status["last_update_time"] > TRAJECTORY_SPLIT_INTERVAL and status["has_ball"]:
-                is_collided = trajectory_fitting(np.array(status["trajectory"]), frame)
+                is_collided = trajectory_fitting(np.array(status["trajectory"]), np.array(status["size"]), frame)
                 status["trajectory"] = []
+                status["size"] = []
                 status["has_ball"] = False
                 if is_collided:
                     return True, value["score"], key
@@ -190,7 +193,7 @@ def calculate_angle(v1, v2):
     return angle_degrees
 
 # 根据网球踪迹判断是否碰撞
-def trajectory_fitting(trajectory, frame):
+def trajectory_fitting(trajectory, size, frame):
     """
     根据trajectory轨迹判断是否发生碰撞
     angle_threshold: 角度变化的阈值，单位为度
@@ -200,7 +203,7 @@ def trajectory_fitting(trajectory, frame):
     y = trajectory[:, 1]
 
     # 绘制轨迹点
-    print(f"traj: {trajectory}")
+    print(f"sizes: {size}")
     for xi, yi in zip(x, y):
         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
@@ -215,9 +218,6 @@ def trajectory_fitting(trajectory, frame):
     for i in range(1, len(velocities)):
         angle = calculate_angle(velocities[i-1], velocities[i])
         angle_changes.append(angle)
-
-    # 打印角度变化数组，方便调试
-    print(f"Angle Changes: {angle_changes}")
 
     # 判断角度变化是否超过阈值
     for angle_change in angle_changes:
