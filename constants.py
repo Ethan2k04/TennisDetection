@@ -1,5 +1,3 @@
-import numpy as np
-
 # 网络配置项
 MAX_RETRY = 3           # 最大重传次数
 RETRY_INTERVAL = 5      # 重传时间间隔（秒）
@@ -36,14 +34,6 @@ ACCELERATION_THRESHOLD = 0.98
 
 # 轨迹分割时间间隔
 TRAJECTORY_SPLIT_INTERVAL = 0.5
-
-# 黑色的HSV范围
-LOWER_BLACK = np.array([0, 0, 0])
-UPPER_BLACK = np.array([180, 255, 30])
-
-# 白色的HSV范围
-LOWER_WHITE = np.array([0, 0, 150])
-UPPER_WHITE = np.array([180, 50, 255])
 
 # 标靶检测形态学操作参数
 REFINE_KSIZE = 12
@@ -116,7 +106,7 @@ MIN_POLY = 5
 PERI_BIAS = 0.3
 
 # 网球置信度
-BALL_CONF = 0.05
+BALL_CONF = 0.1
 
 # 标靶置信度
 TARGET_CONF = 0.1

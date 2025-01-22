@@ -9,18 +9,18 @@ import urllib.parse
 from network import push_data, network_check
 from kernel import detect_target, is_target_result_valid, build_target_status, update_target_status, \
     draw_target_boxes, draw_ball_boxes, check_target_status
-from tools import create_trackbar, save_target_to_config, log_with_timestamp, get_trackbar_values_wait_sec
-from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_THICKNESS, \
-    HINT_COLOR, HINT_SCALE, HINT_THICKNESS, LOG_INVALID_COLOR, \
-    LOG_SCALE, LOG_THICKNESS, LOG_VALID_COLOR, MAX_RETRY, RETARGET_WAIT_SEC, RETRY_INTERVAL, \
-    SCORE_COLOR, SCORE_SCALE, SCORE_THICKNESS, SETTINGS_FILE, TITLE_COLOR, TITLE_SCALE, \
-    TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT, TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO, \
-    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, DEFAULT_FRAME_WIDTH, IMG_SIZE, TENNIS_MODEL_PATH, \
-    TARGET_MODEL_PATH
+from tools import create_trackbar, save_target_to_config, log_with_timestamp
 import multiprocessing as mp
 import numpy as np
 from py_utils.coco_utils import COCO_test_helper
 from yolo11 import setup_model, post_process
+from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_THICKNESS, \
+    HINT_COLOR, HINT_SCALE, HINT_THICKNESS, LOG_INVALID_COLOR, LOG_SCALE, LOG_THICKNESS, \
+    LOG_VALID_COLOR, MAX_RETRY, RETARGET_WAIT_SEC, RETRY_INTERVAL, SCORE_COLOR, SCORE_SCALE, \
+    SCORE_THICKNESS, SETTINGS_FILE, TITLE_COLOR, TITLE_SCALE, TITLE_THICKNESS, X_COOR_WEIGHT, \
+    Y_COOR_WEIGHT, TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO, \
+    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, \
+    DEFAULT_FRAME_WIDTH, IMG_SIZE, TENNIS_MODEL_PATH, TARGET_MODEL_PATH, BALL_CONF
 
 
 # 获取香橙派设备的MAC地址
@@ -37,7 +37,6 @@ class TargetManager:
         self.num_target = 0
         self.target_data = {}
         self.force_retarget = False
-        self.debug = False
         self.model = setup_model(TARGET_MODEL_PATH)
         self.co_helper = COCO_test_helper(enable_letter_box=True)
         if os.path.exists(SETTINGS_FILE):
@@ -58,7 +57,6 @@ class TargetManager:
                 log_with_timestamp(f"\033[92m[Valid] Target saved at {self.target_saved_time}\033[0m")
                 self.is_target_set = True
                 self.force_retarget = False
-                self.debug = False
                 return True
             else:
                 self.target_data = self._parse_target_result(target_result)
@@ -148,7 +146,7 @@ class VideoProcessor:
         while True:
             ret, frame = self.cap.read()
             raw_frame = frame.copy()
-            self.ball_hit_sec, self.retarget_sec = get_trackbar_values_wait_sec()
+            self.ball_hit_sec, self.retarget_sec = (BALL_HIT_WAIT_SEC, RETARGET_WAIT_SEC)
             if not ret:
                 log_with_timestamp("\033[93mEnd of video or failed to grab frame\033[0m")
                 break
@@ -161,7 +159,7 @@ class VideoProcessor:
                     self.config = json.load(file)
                     self.target_status = build_target_status(self.config)
 
-            frame = self._update_score(frame, frame_queue, result_queue)
+            frame = self._update_score(frame, result_queue)
             frame = self._display_frame(frame)
 
             if self.video_writer:
@@ -172,12 +170,10 @@ class VideoProcessor:
                 break
             elif key & 0xFF == ord('h'):
                 self.target_manager.force_retarget = True
-            elif key & 0xFF == ord('j'):
-                self.target_manager.debug = True
 
         self._cleanup()
 
-    def _update_score(self, frame, frame_queue, result_queue) -> cv2.Mat:
+    def _update_score(self, frame, result_queue) -> cv2.Mat:
         ball_result = []
         if result_queue.empty():
             frame = draw_target_boxes(frame, self.config)
@@ -230,7 +226,6 @@ class VideoProcessor:
         fps_org = (int(frame_width * FPS_ORG_RATIO[0]), int(frame_height * FPS_ORG_RATIO[1]))
         hint_1_org = (int(frame_width * HINT_1_ORG_RATIO[0]), int(frame_height * HINT_1_ORG_RATIO[1]))
         hint_2_org = (int(frame_width * HINT_2_ORG_RATIO[0]), int(frame_height * HINT_2_ORG_RATIO[1]))
-        hint_3_org = (int(frame_width * HINT_3_ORG_RATIO[0]), int(frame_height * HINT_3_ORG_RATIO[1]))
         log_valid_org = (int(frame_width * LOG_VALID_ORG_RATIO[0]), int(frame_height * LOG_VALID_ORG_RATIO[1]))
         log_invalid_org = (int(frame_width * LOG_INVALID_ORG_RATIO[0]), int(frame_height * LOG_INVALID_ORG_RATIO[1]))
 
@@ -244,8 +239,7 @@ class VideoProcessor:
         cv2.putText(frame_cpy, f"Score: {self.score_player}", score_org, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE * frame_scale, SCORE_COLOR, int(SCORE_THICKNESS * frame_scale))
         cv2.putText(frame_cpy, f"FPS: {frame_rate}", fps_org, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE * frame_scale, FPS_COLOR, int(FPS_THICKNESS * frame_scale))
         cv2.putText(frame_cpy, f"Press H to retarget", hint_1_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
-        cv2.putText(frame_cpy, f"Press J to show mask", hint_2_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
-        cv2.putText(frame_cpy, f"Press Q to quit", hint_3_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
+        cv2.putText(frame_cpy, f"Press Q to quit", hint_2_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
         
         if self.target_manager.is_target_set:
             cv2.putText(frame_cpy, f"[Valid] Target saved at {self.target_manager.target_saved_time}", log_valid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE * frame_scale, LOG_VALID_COLOR, int(LOG_THICKNESS * frame_scale))
@@ -297,14 +291,12 @@ def cam_proc(frame_queue, result_queue):
 
 # yolo11检测进程
 def detect_proc(frame_queue, result_queue):
-
-    # 定义 YOLO 模型初始化方法
     def init_model():
         return setup_model(TENNIS_MODEL_PATH)
 
     def process_frame(frame, model):
         co_helper = COCO_test_helper(enable_letter_box=True)
-        ball_conf = 0.5  # get_trackbar_values_confidence()
+        ball_conf = BALL_CONF
         img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = np.expand_dims(img, axis=0)
@@ -334,7 +326,7 @@ def detect_proc(frame_queue, result_queue):
                 result_queue.put(ball_positions)
 
     # 启动多个线程进行检测
-    num_threads = 4  # 可以根据需要调整线程数
+    num_threads = 4
     threads = []
     for _ in range(num_threads):
         thread = threading.Thread(target=worker)

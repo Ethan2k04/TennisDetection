@@ -3,20 +3,9 @@ import json
 import time
 import cv2
 import numpy as np
-import threading
-from sklearn.cluster import KMeans
-from yolo11 import setup_model, post_process
-from py_utils.coco_utils import COCO_test_helper
-from tools import get_trackbar_values_filter, get_trackbar_values_confidence, \
-    get_trackbar_values_morphology, log_with_timestamp
-from constants import ANGLE_THRESHOLD, AREA_THRESHOLD_PERCENTAGE, BALL_COLOR, ERODE_ITER, FONT_SCALE, IMG_SIZE, \
-    LINE_THICKNESS, LOWER_BLACK, MIN_DETECTION_SAMPLE, MIN_POLY, NONLINEAR_THRESHOLD, PERI_BIAS, RANDOM_STATE, \
-    SETTINGS_FILE, TARGET_COLOR, TARGET_MODEL_PATH, TENNIS_MODEL_PATH, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL, \
-    UPPER_WHITE, VELOCITY_RATIO_THRESHOLD, ACCELERATION_THRESHOLD
+from constants import BALL_COLOR, FONT_SCALE, LINE_THICKNESS, MIN_POLY, SETTINGS_FILE,\
+      TARGET_COLOR, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL, ACCELERATION_THRESHOLD
 
-
-# 用于过滤小面积噪音
-area_threshold = 0
 
 # 从元信息中读取参数
 score_list = []
@@ -38,7 +27,7 @@ def draw_ball_boxes(frame, ball_positions):
         cv2.rectangle(frame, (top, left), (right, bottom), BALL_COLOR, LINE_THICKNESS)
         # 添加标签文字
         label = "Ball"
-        text_position = (top, left - 6)  # 文字位置设置在圆的右侧
+        text_position = (top, left - 6)
         cv2.putText(frame, label, text_position, cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, BALL_COLOR, LINE_THICKNESS)
 
     return frame
@@ -87,7 +76,7 @@ def detect_target(frame):
     result_contours = []
     if len(detected_contours) > 0:
         # 将检测到的轮廓按面积从大到小排序
-        sorted_contours = sorted(detected_contours, key=lambda c: cv2.contourArea(c), reverse=True)  # 按面积从大到小排序
+        sorted_contours = sorted(detected_contours, key=lambda c: cv2.contourArea(c), reverse=True)
 
         # 选择面积最大的 TARGET_NUM 个轮廓作为结果类
         if len(detected_contours) > num_target:
@@ -96,11 +85,11 @@ def detect_target(frame):
             result_contours = sorted_contours[:len(detected_contours)]
 
     # 返回结果
-    result = {score: [] for score in score_list}  # 初始化字典，键为得分，值为空列表
+    result = {score: [] for score in score_list}
 
     for i in range(len(result_contours)):
-        score = score_list[i]  # 获取对应的得分
-        result[score].append(result_contours[i])  # 将轮廓添加到对应的得分键下
+        score = score_list[i]
+        result[score].append(result_contours[i])
 
     return result
 
@@ -204,7 +193,9 @@ def calculate_angle(v1, v2):
 def trajectory_fitting(trajectory, frame):
     """
     根据trajectory轨迹判断是否发生碰撞
+    angle_threshold: 角度变化的阈值，单位为度
     """
+    angle_threshold = 30
     x = trajectory[:, 0]
     y = trajectory[:, 1]
 
@@ -213,32 +204,24 @@ def trajectory_fitting(trajectory, frame):
     for xi, yi in zip(x, y):
         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
-    # 计算一阶差分（速度）和二阶差分（加速度）
+    # 计算速度向量
     velocities = []
-    accelerations = []
+    for i in range(1, len(trajectory)):
+        v = np.array([x[i] - x[i-1], y[i] - y[i-1]])  # 速度向量
+        velocities.append(v)
 
-    for i in range(1, len(trajectory) - 1):
-        # 计算速度（两点之间的位移）
-        v1 = np.array([x[i] - x[i-1], y[i] - y[i-1]])  # 速度 v1
-        v2 = np.array([x[i+1] - x[i], y[i+1] - y[i]])  # 速度 v2
-        velocity = v2  # 速度变化量
-        velocities.append(velocity)
+    # 计算相邻速度向量之间的角度变化
+    angle_changes = []
+    for i in range(1, len(velocities)):
+        angle = calculate_angle(velocities[i-1], velocities[i])
+        angle_changes.append(angle)
 
-        # 计算加速度（速度的变化）
-        if i > 1:
-            acceleration = v2 - v1  # 加速度是速度的变化
-            accelerations.append(acceleration)
+    # 打印角度变化数组，方便调试
+    print(f"Angle Changes: {angle_changes}")
 
-    # 打印速度和加速度数组，方便调试
-    velocities_magnitude = [np.linalg.norm(v) for v in velocities]
-    accelerations_magnitude = [np.linalg.norm(a) for a in accelerations]
-
-    print(f"Velocities: {velocities_magnitude}")
-    print(f"Accelerations: {accelerations_magnitude}")
-
-    # 判断加速度是否发生突变
-    for i in range(1, len(accelerations_magnitude)):
-        if abs(accelerations_magnitude[i] - accelerations_magnitude[i-1]) > ACCELERATION_THRESHOLD:
+    # 判断角度变化是否超过阈值
+    for angle_change in angle_changes:
+        if angle_change > angle_threshold:
             return True  # 碰撞发生
 
     return False
