@@ -206,6 +206,8 @@ def trajectory_fitting(trajectory, size, frame):
     for xi, yi in zip(x, y):
         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
+    size = smooth_size(size, 3)
+
     # 将size数组存储到本地文件
     save_size_to_file(size)
 
@@ -214,6 +216,20 @@ def trajectory_fitting(trajectory, size, frame):
         return True
 
     return False
+
+def smooth_size(size, window_size=3):
+    """
+    对size数组进行平滑操作（使用移动平均法）
+    :param size: 原始size数组
+    :param window_size: 移动平均的窗口大小
+    :return: 平滑后的size数组
+    """
+    if len(size) < window_size:
+        return size  # 数组长度小于窗口大小，无法平滑
+
+    # 使用移动平均法进行平滑
+    smoothed_size = np.convolve(size, np.ones(window_size)/window_size, mode='valid')
+    return smoothed_size
 
 def save_size_to_file(size):
     """
