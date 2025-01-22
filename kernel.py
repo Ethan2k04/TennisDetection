@@ -228,8 +228,8 @@ def smooth_size(size, window_size=3):
         return size  # 数组长度小于窗口大小，无法平滑
 
     # 使用移动平均法进行平滑
-    smoothed_size = np.convolve(size, np.ones(window_size)/window_size, mode='valid')
-    return smoothed_size
+    # smoothed_size = np.convolve(size, np.ones(window_size)/window_size, mode='valid')
+    return size
 
 def save_size_to_file(size):
     """

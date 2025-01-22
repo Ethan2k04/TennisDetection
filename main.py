@@ -132,6 +132,8 @@ class VideoProcessor:
         self.last_collision_time = time.time()
         self.ball_hit_sec = BALL_HIT_WAIT_SEC
         self.retarget_sec = RETARGET_WAIT_SEC
+        self.ack = 0
+        self.reorder_buffer = {}
         with open(CONFIG_FILE, 'r') as file:
             self.config = json.load(file)
             self.target_status = build_target_status(self.config)
@@ -163,7 +165,7 @@ class VideoProcessor:
                     self.config = json.load(file)
                     self.target_status = build_target_status(self.config)
 
-            frame = self._update_score(frame, result_queue, reorder_buffer, ack)
+            frame = self._update_score(frame, result_queue)
             frame = self._display_frame(frame)
 
             if self.video_writer:
@@ -177,15 +179,15 @@ class VideoProcessor:
 
         self._cleanup()
 
-    def _update_score(self, frame, result_queue, reorder_buffer, ack) -> cv2.Mat:
+    def _update_score(self, frame, result_queue) -> cv2.Mat:
         if not result_queue.empty():
             task_id, ball_positions = result_queue.get()
-            reorder_buffer[task_id] = ball_positions
+            self.reorder_buffer[task_id] = ball_positions
 
-            while ack in reorder_buffer:
-                ball_positions = reorder_buffer.pop(ack)
+            if self.ack in self.reorder_buffer:
+                ball_positions = self.reorder_buffer.pop(self.ack)
                 frame = self._process_ball_positions(frame, ball_positions)
-                ack += 1
+                self.ack += 1
 
         frame = draw_target_boxes(frame, self.config)
         return frame
