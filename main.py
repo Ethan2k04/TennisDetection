@@ -142,6 +142,10 @@ class VideoProcessor:
             self.video_writer = None
 
     def process_stream(self, frame_queue, result_queue) -> None:
+        task_id = 0
+        reorder_buffer = {}
+        ack = 0
+
         while True:
             ret, frame = self.cap.read()
             raw_frame = frame.copy()
@@ -151,14 +155,15 @@ class VideoProcessor:
                 break
             
             if not frame_queue.full():
-                frame_queue.put(raw_frame)
+                frame_queue.put((task_id, raw_frame))
+                task_id += 1
 
             if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
                     self.config = json.load(file)
                     self.target_status = build_target_status(self.config)
 
-            frame = self._update_score(frame, result_queue)
+            frame = self._update_score(frame, result_queue, reorder_buffer, ack)
             frame = self._display_frame(frame)
 
             if self.video_writer:
@@ -172,22 +177,27 @@ class VideoProcessor:
 
         self._cleanup()
 
-    def _update_score(self, frame, result_queue) -> cv2.Mat:
-        ball_result = []
-        if result_queue.empty():
-            frame = draw_target_boxes(frame, self.config)
-            return frame
+    def _update_score(self, frame, result_queue, reorder_buffer, ack) -> cv2.Mat:
         if not result_queue.empty():
-            ball_result = result_queue.get()
+            task_id, ball_positions = result_queue.get()
+            reorder_buffer[task_id] = ball_positions
 
-        frame = draw_ball_boxes(frame, ball_result)
+            while ack in reorder_buffer:
+                ball_positions = reorder_buffer.pop(ack)
+                frame = self._process_ball_positions(frame, ball_positions)
+                ack += 1
+
         frame = draw_target_boxes(frame, self.config)
+        return frame
+
+    def _process_ball_positions(self, frame, ball_positions) -> cv2.Mat:
+        frame = draw_ball_boxes(frame, ball_positions)
 
         if len(self.target_status.keys()) > 0:
             ball_center = (0, 0)
-            for _, ball in enumerate(ball_result):
+            for _, ball in enumerate(ball_positions):
                 ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
-                ball_size = int(abs(ball[0] - ball[2])) * int(abs(ball[1] -ball[3]))
+                ball_size = int(abs(ball[0] - ball[2])) * int(abs(ball[1] - ball[3]))
                 update_target_status(self.target_status, ball_center, ball_size)
 
             collision_detected, score, idx = check_target_status(self.target_status, frame)
@@ -250,7 +260,6 @@ class VideoProcessor:
 
         return frame
 
-            
     def _cleanup(self) -> None:
         self.cap.release()
         if self.video_writer:
@@ -318,12 +327,12 @@ def detect_proc(frame_queue, result_queue):
     def worker():
         model = init_model()
         while True:
-            frame = frame_queue.get()
+            task_id, frame = frame_queue.get()
             if frame is None:
                 continue
             ball_positions = process_frame(frame, model)
             if not result_queue.full():
-                result_queue.put(ball_positions)
+                result_queue.put((task_id, ball_positions))
 
     # 启动多个线程进行检测
     num_threads = 4
