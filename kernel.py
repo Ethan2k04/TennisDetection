@@ -192,13 +192,25 @@ def calculate_angle(v1, v2):
     angle_degrees = np.degrees(angle_radians)
     return angle_degrees
 
+def has_minimum(size):
+    """
+    判断size数组中是否存在极小值
+    """
+    if len(size) < 3:
+        return False  # 数组长度小于3，无法形成极小值
+
+    for i in range(1, len(size) - 1):
+        if size[i] < size[i-1] and size[i] < size[i+1]:
+            return True  # 找到极小值
+
+    return False  # 没有找到极小值
+
 # 根据网球踪迹判断是否碰撞
 def trajectory_fitting(trajectory, size, frame):
     """
     根据trajectory轨迹判断是否发生碰撞
     angle_threshold: 角度变化的阈值，单位为度
     """
-    angle_threshold = 30
     x = trajectory[:, 0]
     y = trajectory[:, 1]
 
@@ -207,22 +219,9 @@ def trajectory_fitting(trajectory, size, frame):
     for xi, yi in zip(x, y):
         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
-    # 计算速度向量
-    velocities = []
-    for i in range(1, len(trajectory)):
-        v = np.array([x[i] - x[i-1], y[i] - y[i-1]])  # 速度向量
-        velocities.append(v)
-
-    # 计算相邻速度向量之间的角度变化
-    angle_changes = []
-    for i in range(1, len(velocities)):
-        angle = calculate_angle(velocities[i-1], velocities[i])
-        angle_changes.append(angle)
-
-    # 判断角度变化是否超过阈值
-    for angle_change in angle_changes:
-        if angle_change > angle_threshold:
-            return True  # 碰撞发生
+    # 检测size数组中是否存在极小值
+    if has_minimum(size):
+        return True
 
     return False
 
