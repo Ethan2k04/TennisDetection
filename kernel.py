@@ -178,20 +178,6 @@ def check_target_status(target_status, frame):
 
     return False, 0, None
 
-# 计算点与点之间的欧几里得距离
-def calculate_distance(p1, p2):
-    return np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
-
-# 计算两个向量的夹角（返回角度）
-def calculate_angle(v1, v2):
-    dot_product = np.dot(v1, v2)
-    norm_v1 = np.linalg.norm(v1)
-    norm_v2 = np.linalg.norm(v2)
-    cos_theta = dot_product / (norm_v1 * norm_v2)
-    angle_radians = np.arccos(np.clip(cos_theta, -1.0, 1.0))
-    angle_degrees = np.degrees(angle_radians)
-    return angle_degrees
-
 def has_minimum(size):
     """
     判断size数组中是否存在极小值
@@ -205,7 +191,8 @@ def has_minimum(size):
 
     return False  # 没有找到极小值
 
-# 根据网球踪迹判断是否碰撞
+SIZE_FILE = "size_data.txt"  # 存储size数组的文件
+
 def trajectory_fitting(trajectory, size, frame):
     """
     根据trajectory轨迹判断是否发生碰撞
@@ -219,11 +206,23 @@ def trajectory_fitting(trajectory, size, frame):
     for xi, yi in zip(x, y):
         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
+    # 将size数组存储到本地文件
+    save_size_to_file(size)
+
     # 检测size数组中是否存在极小值
     if has_minimum(size):
         return True
 
     return False
+
+def save_size_to_file(size):
+    """
+    将size数组存储到本地文件
+    """
+    with open(SIZE_FILE, "a") as file:
+        # 将size数组转换为字符串，并用逗号分隔
+        size_str = ",".join(map(str, size))
+        file.write(size_str + "\n")  # 每个size数组占一行
 
 # 对输入的 mask 进行形态学优化操作
 def refine_mask(mask, ksize):
