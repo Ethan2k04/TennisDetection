@@ -31,6 +31,9 @@ ANGLE_THRESHOLD = 25
 # 判断是否是速度突变点的前后速度比例阈值
 VELOCITY_RATIO_THRESHOLD = 1.5
 
+# 判断是否发生加速度突变
+ACCELERATION_THRESHOLD = 0.98
+
 # 轨迹分割时间间隔
 TRAJECTORY_SPLIT_INTERVAL = 0.5
 

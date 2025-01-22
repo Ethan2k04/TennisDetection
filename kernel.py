@@ -12,11 +12,20 @@ from tools import get_trackbar_values_filter, get_trackbar_values_confidence, \
 from constants import ANGLE_THRESHOLD, AREA_THRESHOLD_PERCENTAGE, BALL_COLOR, ERODE_ITER, FONT_SCALE, IMG_SIZE, \
     LINE_THICKNESS, LOWER_BLACK, MIN_DETECTION_SAMPLE, MIN_POLY, NONLINEAR_THRESHOLD, PERI_BIAS, RANDOM_STATE, \
     SETTINGS_FILE, TARGET_COLOR, TARGET_MODEL_PATH, TENNIS_MODEL_PATH, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL, \
-    UPPER_WHITE, VELOCITY_RATIO_THRESHOLD
+    UPPER_WHITE, VELOCITY_RATIO_THRESHOLD, ACCELERATION_THRESHOLD
 
 
 # 用于过滤小面积噪音
 area_threshold = 0
+
+# 从元信息中读取参数
+score_list = []
+num_target = 0
+if os.path.exists(SETTINGS_FILE):
+    with open(SETTINGS_FILE, 'r') as file:
+        settings = json.load(file)
+    score_list = settings["target_score"]
+    num_target = len(score_list)
 
 # 根据检测结果绘制网球目标框
 def draw_ball_boxes(frame, ball_positions):
@@ -34,8 +43,25 @@ def draw_ball_boxes(frame, ball_positions):
 
     return frame
 
+# 判断轮廓是否为圆形
+def is_circle(contour):
+    """
+    根据轮廓点判断轮廓是否为类圆形
+    """
+    if len(contour) < MIN_POLY:
+        return False
+
+    # 拟合椭圆
+    (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
+
+    # 计算圆度（长轴和短轴的比例）
+    circularity = minor_axis / major_axis if major_axis != 0 else 0
+
+    # 圆度接近1且面积大于一定阈值
+    return circularity > 0.8 and cv2.contourArea(contour) > 100
+
 # 检测目标轮廓
-def detect_target(frame, model_digit, co_helper, debug=False):
+def detect_target(frame):
     """
     检测 frame 中的椭圆轮廓，并选择面积最大的 6 个椭圆作为目标。
     """
@@ -55,46 +81,27 @@ def detect_target(frame, model_digit, co_helper, debug=False):
     detected_contours = []
 
     # 遍历轮廓
-    for contour in contours:
-        # 计算轮廓面积
-        area = cv2.contourArea(contour)
+    detected_contours = [contour for contour in contours if is_circle(contour) and cv2.contourArea(contour) > 100]
 
-        # 过滤掉太小的轮廓
-        if area < 100:  # 根据需要调整最小面积阈值
-            continue
-
-        # 检查轮廓点的数量是否足够拟合椭圆
-        if len(contour) >= 5:  # 至少需要 5 个点
-            # 将轮廓点转换为 NumPy 数组，确保形状为 (N, 1, 2)
-            contour_points = np.array(contour, dtype=np.float32)
-
-            # 拟合椭圆
-            try:
-                (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour_points)
-                detected_contours.append({
-                    "contour": contour_points,
-                    "area": area,
-                    "center": (int(x), int(y)),
-                    "major_axis": major_axis,
-                    "minor_axis": minor_axis,
-                    "angle": angle
-                })
-            except cv2.error as e:
-                if debug:
-                    print(f"拟合椭圆失败: {e}")
-                continue
-
-    # 如果有检测到的轮廓，选择面积最大的 6 个作为结果类
+    # 如果有检测到的轮廓，选择面积最大的 TARGET_NUM 个作为结果类
     result_contours = []
     if len(detected_contours) > 0:
         # 将检测到的轮廓按面积从大到小排序
-        sorted_contours = sorted(detected_contours, key=lambda x: x["area"], reverse=True)  # 按面积从大到小排序
+        sorted_contours = sorted(detected_contours, key=lambda c: cv2.contourArea(c), reverse=True)  # 按面积从大到小排序
 
-        # 选择面积最大的 6 个轮廓作为结果类
-        result_contours = sorted_contours[:6]
+        # 选择面积最大的 TARGET_NUM 个轮廓作为结果类
+        if len(detected_contours) > num_target:
+            result_contours = sorted_contours[:num_target]
+        else:
+            result_contours = sorted_contours[:len(detected_contours)]
 
     # 返回结果
-    result = {"targets": result_contours}
+    result = {score: [] for score in score_list}  # 初始化字典，键为得分，值为空列表
+
+    for i in range(len(result_contours)):
+        score = score_list[i]  # 获取对应的得分
+        result[score].append(result_contours[i])  # 将轮廓添加到对应的得分键下
+
     return result
 
 # 根据检测结果绘制标靶目标框
@@ -193,8 +200,6 @@ def calculate_angle(v1, v2):
     angle_degrees = np.degrees(angle_radians)
     return angle_degrees
 
-ACCELERATION_THRESHOLD = 0.98
-
 # 根据网球踪迹判断是否碰撞
 def trajectory_fitting(trajectory, frame):
     """
@@ -254,11 +259,10 @@ def is_target_result_valid(target_result, num_target):
     """
     判断靶标识别结果是否符合settings中的设定
     """
-    total_length = sum(len(v) for k, v in target_result.items() if k != "undef")
-    return total_length == num_target and all(
-        len(v) > 0 for k, v in target_result.items() if k != "undef")
+    # 统计所有轮廓的总数
+    total_contours = 0
+    for score, contours in target_result.items():
+        total_contours += len(contours)
 
-# 释放资源
-def destruct():
-    model_tennis.release()
-    model_digit.release()
+    # 判断总数是否等于 num_target
+    return total_contours == num_target

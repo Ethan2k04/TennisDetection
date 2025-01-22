@@ -43,11 +43,13 @@ class TargetManager:
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, 'r') as file:
                 settings = json.load(file)
-                self.num_target = settings["num_target"]
+                self.num_target = len(settings["target_score"])
+        else:
+            self.num_target = 0
 
     def relocate_target(self, frame, retarget_wait_sec: float) -> bool:
         if (not self.is_target_set or self.force_retarget) and time.time() - self.last_relocate_time > retarget_wait_sec:
-            target_result = detect_target(frame, self.model, self.co_helper, self.debug)
+            target_result = detect_target(frame)
             self.last_relocate_time = time.time()
             if is_target_result_valid(target_result, self.num_target):
                 self.target_data = self._parse_target_result(target_result)
@@ -292,40 +294,6 @@ def cam_proc(frame_queue, result_queue):
     else:
         print(f"Error: Unsupported file type or invalid input {input_path}")
         sys.exit(1)
-
-
-# yolo11检测进程
-# def detect_proc(frame_queue, result_queue):
-#     from py_utils.coco_utils import COCO_test_helper
-#     from yolo11 import setup_model, post_process
-#     model_tennis = setup_model(TENNIS_MODEL_PATH)
-#     co_helper = COCO_test_helper(enable_letter_box=True)
-#     while True:
-#         frame = frame_queue.get()
-#         if frame is None:
-#             continue
-#         ball_conf = 0.2 # get_trackbar_values_confidence()
-#         img = co_helper.letter_box(im=frame.copy(), new_shape=(IMG_SIZE[1], IMG_SIZE[0]), pad_color=(0, 0, 0))
-#         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-#         cv2.imshow("img", img)
-#         cv2.waitKey(10)
-#         img = np.expand_dims(img, axis=0)
-#         outputs = model_tennis.run([img])
-#         boxes = []
-#         if outputs is not None:
-#             boxes, _, scores = post_process(outputs)
-
-#         ball_positions = []
-#         if boxes is not None:
-#             boxes = co_helper.get_real_box(boxes)
-#             for i, box in enumerate(boxes):
-#                 if scores[i] > ball_conf:
-#                     top, left, right, bottom = box
-#                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
-
-#         # 把结果存储到结果队列
-#         if not result_queue.full():
-#             result_queue.put(ball_positions)
 
 # yolo11检测进程
 def detect_proc(frame_queue, result_queue):
