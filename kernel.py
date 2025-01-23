@@ -4,7 +4,7 @@ import time
 import cv2
 import numpy as np
 from constants import BALL_COLOR, FONT_SCALE, LINE_THICKNESS, MIN_POLY, SETTINGS_FILE,\
-      TARGET_COLOR, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL
+      TARGET_COLOR, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL, PERI_BIAS, SIZE_FILE
 
 
 # 从元信息中读取参数
@@ -47,7 +47,7 @@ def is_circle(contour):
     circularity = minor_axis / major_axis if major_axis != 0 else 0
 
     # 圆度接近1且面积大于一定阈值
-    return circularity > 0.8 and cv2.contourArea(contour) > 100
+    return circularity > 1.0 - PERI_BIAS and cv2.contourArea(contour) > 100
 
 # 检测目标轮廓
 def detect_target(frame):
@@ -178,20 +178,18 @@ def check_target_status(target_status, frame):
 
     return False, 0, None
 
-def has_minimum(size):
+def has_minimum(sizes):
     """
     判断size数组中是否存在极小值
     """
-    if len(size) < 3:
+    if len(sizes) < 3:
         return False  # 数组长度小于3，无法形成极小值
 
-    for i in range(1, len(size) - 1):
-        if size[i] < size[i-1] and size[i] < size[i+1]:
+    for i in range(1, len(sizes) - 1):
+        if sizes[i] < sizes[i-1] and sizes[i] < sizes[i+1]:
             return True  # 找到极小值
 
     return False  # 没有找到极小值
-
-SIZE_FILE = "size_data.txt"  # 存储size数组的文件
 
 def trajectory_fitting(trajectory, size, frame):
     """
@@ -202,11 +200,8 @@ def trajectory_fitting(trajectory, size, frame):
     y = trajectory[:, 1]
 
     # 绘制轨迹点
-    print(f"sizes: {size}")
     for xi, yi in zip(x, y):
         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
-
-    size = smooth_size(size, 3)
 
     # 将size数组存储到本地文件
     save_size_to_file(size)
@@ -217,20 +212,6 @@ def trajectory_fitting(trajectory, size, frame):
 
     return False
 
-def smooth_size(size, window_size=3):
-    """
-    对size数组进行平滑操作（使用移动平均法）
-    :param size: 原始size数组
-    :param window_size: 移动平均的窗口大小
-    :return: 平滑后的size数组
-    """
-    if len(size) < window_size:
-        return size  # 数组长度小于窗口大小，无法平滑
-
-    # 使用移动平均法进行平滑
-    # smoothed_size = np.convolve(size, np.ones(window_size)/window_size, mode='valid')
-    return size
-
 def save_size_to_file(size):
     """
     将size数组存储到本地文件
@@ -239,17 +220,6 @@ def save_size_to_file(size):
         # 将size数组转换为字符串，并用逗号分隔
         size_str = ",".join(map(str, size))
         file.write(size_str + "\n")  # 每个size数组占一行
-
-# 对输入的 mask 进行形态学优化操作
-def refine_mask(mask, ksize):
-    """
-    对输入的图像进行形态学操作
-    """
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (ksize, ksize))  # 调整核大小
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)  # 闭运算
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)  # 去噪点
-
-    return mask
 
 # 判断目标结果集合是否符合设定
 def is_target_result_valid(target_result, num_target):

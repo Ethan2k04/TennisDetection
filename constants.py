@@ -11,6 +11,13 @@ CONFIG_FILE = "meta/config.json"
 # SETTINGS 文件名为 settings.json
 SETTINGS_FILE = "meta/settings.json"
 
+# 存储size数组的文件
+SIZE_FILE = "size_data.txt"
+
+NUM_THREAD = 4
+
+MAX_QUEUE = 100
+
 # 每隔多少秒重新检测标靶
 RETARGET_WAIT_SEC = 1
 
@@ -66,9 +73,8 @@ SCORE_ORG_RATIO = (0.03, 0.25)
 FPS_ORG_RATIO = (0.03, 0.35)
 HINT_1_ORG_RATIO = (0.03, 0.80)
 HINT_2_ORG_RATIO = (0.03, 0.85)
-HINT_3_ORG_RATIO = (0.03, 0.90)
-LOG_VALID_ORG_RATIO = (0.4, 0.90)
-LOG_INVALID_ORG_RATIO = (0.4, 0.90)
+LOG_VALID_ORG_RATIO = (0.4, 0.85)
+LOG_INVALID_ORG_RATIO = (0.4, 0.85)
 
 # 标签文字显示偏移
 TEXT_MARGIN = 30
@@ -103,7 +109,7 @@ LOG_INVALID_COLOR = (0, 200, 200)
 MIN_POLY = 5
 
 # 非椭圆容忍度
-PERI_BIAS = 0.3
+PERI_BIAS = 0.2
 
 # 网球置信度
 BALL_CONF = 0.1

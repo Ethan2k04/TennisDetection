@@ -19,8 +19,8 @@ from constants import BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_
     LOG_VALID_COLOR, MAX_RETRY, RETARGET_WAIT_SEC, RETRY_INTERVAL, SCORE_COLOR, SCORE_SCALE, \
     SCORE_THICKNESS, SETTINGS_FILE, TITLE_COLOR, TITLE_SCALE, TITLE_THICKNESS, X_COOR_WEIGHT, \
     Y_COOR_WEIGHT, TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO, \
-    HINT_2_ORG_RATIO, HINT_3_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, \
-    DEFAULT_FRAME_WIDTH, IMG_SIZE, TENNIS_MODEL_PATH, TARGET_MODEL_PATH, BALL_CONF
+    HINT_2_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO, DEFAULT_FRAME_WIDTH, \
+    IMG_SIZE, TENNIS_MODEL_PATH, BALL_CONF, NUM_THREAD, MAX_QUEUE
 
 
 # 获取香橙派设备的MAC地址
@@ -31,14 +31,12 @@ mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8)
 # 目标管理类
 class TargetManager:
     def __init__(self):
-        self.is_target_set = True
-        self.last_relocate_time = time.time()
-        self.target_saved_time = time.strftime('%Y-%m-%d %H:%M:%S')
         self.num_target = 0
         self.target_data = {}
+        self.is_target_set = True
         self.force_retarget = False
-        self.model = setup_model(TARGET_MODEL_PATH)
-        self.co_helper = COCO_test_helper(enable_letter_box=True)
+        self.last_relocate_time = time.time()
+        self.target_saved_time = time.strftime('%Y-%m-%d %H:%M:%S')
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, 'r') as file:
                 settings = json.load(file)
@@ -65,8 +63,7 @@ class TargetManager:
                 self.is_target_set = False
                 return False
 
-    @staticmethod
-    def _parse_target_result(target_result: dict) -> dict:
+    def _parse_target_result(self, target_result: dict) -> dict:
         target_data = []
         target_id = 0
 
@@ -110,15 +107,8 @@ class TargetManager:
 class VideoProcessor:
     def __init__(self, input_source=0, output_path=None):
         self.cap = cv2.VideoCapture(input_source)
-
-        # ---{解决帧率问题开始}---
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
         self.cap.set(cv2.CAP_PROP_FPS, 60)
-        # ---{解决帧率问题结束}---
-
-        if not self.cap.isOpened():
-            raise RuntimeError(f"Unable to access input source: {input_source}")
-
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
@@ -132,8 +122,11 @@ class VideoProcessor:
         self.last_collision_time = time.time()
         self.ball_hit_sec = BALL_HIT_WAIT_SEC
         self.retarget_sec = RETARGET_WAIT_SEC
+        self.task_id = 0
         self.ack = 0
         self.reorder_buffer = {}
+        if not self.cap.isOpened():
+            raise RuntimeError(f"Unable to access input source: {input_source}")
         with open(CONFIG_FILE, 'r') as file:
             self.config = json.load(file)
             self.target_status = build_target_status(self.config)
@@ -144,21 +137,18 @@ class VideoProcessor:
             self.video_writer = None
 
     def process_stream(self, frame_queue, result_queue) -> None:
-        task_id = 0
-        reorder_buffer = {}
-        ack = 0
-
         while True:
             ret, frame = self.cap.read()
-            raw_frame = frame.copy()
+            if frame is not None:
+                raw_frame = frame.copy()
             self.ball_hit_sec, self.retarget_sec = (BALL_HIT_WAIT_SEC, RETARGET_WAIT_SEC)
             if not ret:
                 log_with_timestamp("\033[93mEnd of video or failed to grab frame\033[0m")
                 break
             
             if not frame_queue.full():
-                frame_queue.put((task_id, raw_frame))
-                task_id += 1
+                frame_queue.put((self.task_id, raw_frame))
+                self.task_id = (self.task_id + 1) % MAX_QUEUE
 
             if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
@@ -184,10 +174,10 @@ class VideoProcessor:
             task_id, ball_positions = result_queue.get()
             self.reorder_buffer[task_id] = ball_positions
 
-            if self.ack in self.reorder_buffer:
+            while self.ack in self.reorder_buffer:
                 ball_positions = self.reorder_buffer.pop(self.ack)
                 frame = self._process_ball_positions(frame, ball_positions)
-                self.ack += 1
+                self.ack = (self.ack + 1) % MAX_QUEUE
 
         frame = draw_target_boxes(frame, self.config)
         return frame
@@ -230,7 +220,8 @@ class VideoProcessor:
         frame_height = frame.shape[0]
         frame_scale = frame_width / DEFAULT_FRAME_WIDTH
 
-        frame_cpy = frame.copy()
+        if frame is not None:
+            frame_display = frame.copy()
 
         # 根据比例系数计算文字的位置
         title_org = (int(frame_width * TITLE_ORG_RATIO[0]), int(frame_height * TITLE_ORG_RATIO[1]))
@@ -247,18 +238,18 @@ class VideoProcessor:
         self.last_frame_time = current_time
 
         # 绘制各种信息
-        cv2.putText(frame_cpy, "TENNISv1.0", title_org, cv2.FONT_HERSHEY_SIMPLEX, TITLE_SCALE * frame_scale, TITLE_COLOR, int(TITLE_THICKNESS * frame_scale))
-        cv2.putText(frame_cpy, f"Score: {self.score_player}", score_org, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE * frame_scale, SCORE_COLOR, int(SCORE_THICKNESS * frame_scale))
-        cv2.putText(frame_cpy, f"FPS: {frame_rate}", fps_org, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE * frame_scale, FPS_COLOR, int(FPS_THICKNESS * frame_scale))
-        cv2.putText(frame_cpy, f"Press H to retarget", hint_1_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
-        cv2.putText(frame_cpy, f"Press Q to quit", hint_2_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
+        cv2.putText(frame_display, "TENNISv1.0", title_org, cv2.FONT_HERSHEY_SIMPLEX, TITLE_SCALE * frame_scale, TITLE_COLOR, int(TITLE_THICKNESS * frame_scale))
+        cv2.putText(frame_display, f"Score: {self.score_player}", score_org, cv2.FONT_HERSHEY_SIMPLEX, SCORE_SCALE * frame_scale, SCORE_COLOR, int(SCORE_THICKNESS * frame_scale))
+        cv2.putText(frame_display, f"FPS: {frame_rate}", fps_org, cv2.FONT_HERSHEY_SIMPLEX, FPS_SCALE * frame_scale, FPS_COLOR, int(FPS_THICKNESS * frame_scale))
+        cv2.putText(frame_display, f"Press H to retarget", hint_1_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
+        cv2.putText(frame_display, f"Press Q to quit", hint_2_org, cv2.FONT_HERSHEY_SIMPLEX, HINT_SCALE * frame_scale, HINT_COLOR, int(HINT_THICKNESS * frame_scale))
         
         if self.target_manager.is_target_set:
-            cv2.putText(frame_cpy, f"[Valid] Target saved at {self.target_manager.target_saved_time}", log_valid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE * frame_scale, LOG_VALID_COLOR, int(LOG_THICKNESS * frame_scale))
+            cv2.putText(frame_display, f"[Valid] Target saved at {self.target_manager.target_saved_time}", log_valid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE * frame_scale, LOG_VALID_COLOR, int(LOG_THICKNESS * frame_scale))
         else:
-            cv2.putText(frame_cpy, f"[Invalid] No valid target detected. Retrying...", log_invalid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE * frame_scale, LOG_INVALID_COLOR, int(LOG_THICKNESS * frame_scale))
+            cv2.putText(frame_display, f"[Invalid] No valid target detected. Retrying...", log_invalid_org, cv2.FONT_HERSHEY_SIMPLEX, LOG_SCALE * frame_scale, LOG_INVALID_COLOR, int(LOG_THICKNESS * frame_scale))
 
-        cv2.imshow("Video Detection", frame_cpy)
+        cv2.imshow("Video Detection", frame_display)
 
         return frame
 
@@ -337,7 +328,7 @@ def detect_proc(frame_queue, result_queue):
                 result_queue.put((task_id, ball_positions))
 
     # 启动多个线程进行检测
-    num_threads = 4
+    num_threads = NUM_THREAD
     threads = []
     for _ in range(num_threads):
         thread = threading.Thread(target=worker)
@@ -351,8 +342,8 @@ def detect_proc(frame_queue, result_queue):
         
 
 if __name__ == "__main__":
-    frame_queue = mp.Queue(maxsize=100)
-    result_queue = mp.Queue(maxsize=100)
+    frame_queue = mp.Queue(maxsize=MAX_QUEUE)
+    result_queue = mp.Queue(maxsize=MAX_QUEUE)
 
     cam_process = mp.Process(target=cam_proc, args=(frame_queue, result_queue))
     detect_process = mp.Process(target=detect_proc, args=(frame_queue, result_queue))
