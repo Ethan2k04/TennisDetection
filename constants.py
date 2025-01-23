@@ -1,7 +1,7 @@
 # 网络配置项
-MAX_RETRY = 3           # 最大重传次数
-RETRY_INTERVAL = 5      # 重传时间间隔（秒）
-SALT = "learningxm"     # 固定盐值
+MAX_RETRY = 3  # 最大重传次数
+RETRY_INTERVAL = 5  # 重传时间间隔（秒）
+SALT = "learningxm"  # 固定盐值
 API_URL = "https://wq.hoeagri.com/api/Training/receiveInput"
 HANDLER_URL = "10.128.51.10"
 
@@ -11,11 +11,13 @@ CONFIG_FILE = "meta/config.json"
 # SETTINGS 文件名为 settings.json
 SETTINGS_FILE = "meta/settings.json"
 
-# 存储size数组的文件
+# 存储 size 数组的文件
 SIZE_FILE = "size_data.txt"
 
+# yolo 检测开启的线程数
 NUM_THREAD = 4
 
+# 进程间传输队列的大小
 MAX_QUEUE = 100
 
 # 每隔多少秒重新检测标靶
@@ -127,7 +129,7 @@ TENNIS_MODEL_PATH = "model/best-tennis-s-relu.rknn"
 TARGET_MODEL_PATH = "model/best-digit-s-relu.rknn"
 MODEL_IMGSIZE = 320
 IMG_SIZE = (640, 640)
-TENNIS_CLASSES = ("ball")
+TENNIS_CLASSES = ("ball",)
 TENNIS_ID_LIST = [1]
 TARGET_CLASSES = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
 TARGET_ID_LIST = [1, 2, 3, 4, 5, 6, 7, 8, 9]

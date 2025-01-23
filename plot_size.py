@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
 
+
 # 文件路径
 SIZE_FILE = "size_data.txt"
+
 
 def read_size_data():
     """
@@ -14,6 +16,7 @@ def read_size_data():
             size = list(map(int, line.strip().split(",")))
             sizes.append(size)
     return sizes
+
 
 def plot_size_data(sizes):
     """
@@ -28,6 +31,7 @@ def plot_size_data(sizes):
     plt.legend()
     plt.grid(True)
     plt.show()
+
 
 if __name__ == "__main__":
     # 读取size数据

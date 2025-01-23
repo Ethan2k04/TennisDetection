@@ -7,6 +7,7 @@ from constants import CONFIG_FILE
 def log_with_timestamp(message: str) -> None:
     print(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {message}")
 
+
 # 定义保存目标框信息的函数
 def save_target_to_config(target_data):
     # 清空 config 内容
