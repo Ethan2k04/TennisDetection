@@ -1,5 +1,7 @@
 # 基于yolo11的网球落点检测项目（部署于香橙派5max）
 
+![tennis_logo](https://github.com/user-attachments/assets/47f2c4ab-69fa-4c9d-b2c4-932f3cc24ebd)
+
 > 请勿 fork 或者 clone 本仓库，仅个人使用
 
 ## Update 1.13
