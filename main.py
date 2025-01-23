@@ -307,18 +307,6 @@ def cam_proc(frame_queue, result_queue):
 
 # yolo11检测进程
 def detect_proc(frame_queue, result_queue):
-    # 启动多个线程进行检测
-    num_threads = NUM_THREAD
-    threads = []
-    for _ in range(num_threads):
-        thread = threading.Thread(target=worker)
-        thread.daemon = True
-        thread.start()
-        threads.append(thread)
-    # 等待线程结束
-    for thread in threads:
-        thread.join()
-
     def init_model():
         return setup_model(TENNIS_MODEL_PATH)
 
@@ -354,6 +342,19 @@ def detect_proc(frame_queue, result_queue):
             if not result_queue.full():
                 result_queue.put((task_id, ball_positions))
 
+
+    # 启动多个线程进行检测
+    num_threads = NUM_THREAD
+    threads = []
+    for _ in range(num_threads):
+        thread = threading.Thread(target=worker)
+        thread.daemon = True
+        thread.start()
+        threads.append(thread)
+    # 等待线程结束
+    for thread in threads:
+        thread.join()
+        
 
 if __name__ == "__main__":
     frame_queue = mp.Queue(maxsize=MAX_QUEUE)
