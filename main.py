@@ -137,6 +137,10 @@ class VideoProcessor:
         self.task_id = 0
         self.ack = 0
         self.reorder_buffer = {}
+        self.frame_counter = 0
+        self.last_fps = 0
+        self.last_fps_calc_time = time.time()
+
         if not self.cap.isOpened():
             raise RuntimeError(f"Unable to access input source: {input_source}")
         
@@ -246,10 +250,18 @@ class VideoProcessor:
         log_valid_org = (int(frame_width * LOG_VALID_ORG_RATIO[0]), int(frame_height * LOG_VALID_ORG_RATIO[1]))
         log_invalid_org = (int(frame_width * LOG_INVALID_ORG_RATIO[0]), int(frame_height * LOG_INVALID_ORG_RATIO[1]))
         
-        # 获取当前时间和帧率
+        # 统计1秒内的帧数
         current_time = time.time()
-        frame_rate = round(1 / (current_time - self.last_frame_time))
-        self.last_frame_time = current_time
+        self.frame_counter += 1
+        
+        # 如果距离上一次计算FPS的时间超过1秒，则计算FPS并重置计数器
+        frame_rate = self.frame_counter
+        if current_time - self.last_fps_calc_time >= 1.0:
+            self.last_fps = self.frame_counter
+            self.frame_counter = 0
+            self.last_fps_calc_time = current_time
+        else:
+            frame_rate = self.last_fps
         
         # 绘制各种信息
         cv2.putText(
