@@ -65,6 +65,7 @@ class TargetManager:
                 )
                 self.is_target_set = True
                 self.force_retarget = False
+
                 return True
             else:
                 self.target_data = self._parse_target_result(target_result)
@@ -73,6 +74,7 @@ class TargetManager:
                     "\033[93m[Invalid] No valid target detected. Retrying...\033[0m"
                 )
                 self.is_target_set = False
+
                 return False
 
     def _parse_target_result(self, target_result: dict) -> dict:
@@ -94,6 +96,7 @@ class TargetManager:
                     "score_value": score_value,
                 })
                 target_id += 1
+
         # 对靶标根据score_value进行排序（以实现从上到下从左到右编号）
         target_data.sort(key=lambda item: item["score_value"])
         # 转化为结果json格式
@@ -108,6 +111,7 @@ class TargetManager:
             }
             for idx, target in enumerate(target_data)
         }
+
         return sorted_target_data
 
 
@@ -135,9 +139,11 @@ class VideoProcessor:
         self.reorder_buffer = {}
         if not self.cap.isOpened():
             raise RuntimeError(f"Unable to access input source: {input_source}")
+        
         with open(CONFIG_FILE, 'r') as file:
             self.config = json.load(file)
             self.target_status = build_target_status(self.config)
+
         if self.output_path:
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             self.video_writer = cv2.VideoWriter(
@@ -149,35 +155,40 @@ class VideoProcessor:
     def process_stream(self, frame_queue, result_queue) -> None:
         while True:
             ret, frame = self.cap.read()
+            self.ball_hit_sec, self.retarget_sec = (BALL_HIT_WAIT_SEC, RETARGET_WAIT_SEC)
             if frame is not None:
                 raw_frame = frame.copy()
-            self.ball_hit_sec, self.retarget_sec = (BALL_HIT_WAIT_SEC, RETARGET_WAIT_SEC)
+
             if not ret:
                 log_with_timestamp("\033[93mEnd of video or failed to grab frame\033[0m")
                 break
+
             if not frame_queue.full():
                 frame_queue.put((self.task_id, raw_frame))
                 self.task_id = (self.task_id + 1) % MAX_QUEUE
+                
             if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
                     self.config = json.load(file)
                     self.target_status = build_target_status(self.config)
+
             frame = self._update_score(frame, result_queue)
             frame = self._display_frame(frame)
             if self.video_writer:
                 self.video_writer.write(frame)
+
             key = cv2.waitKey(1)
             if key & 0xFF == ord('q'):
                 break
             elif key & 0xFF == ord('h'):
                 self.target_manager.force_retarget = True
+
         self._cleanup()
 
     def _update_score(self, frame, result_queue) -> cv2.Mat:
         if not result_queue.empty():
             task_id, ball_positions = result_queue.get()
             self.reorder_buffer[task_id] = ball_positions
-
             while self.ack in self.reorder_buffer:
                 ball_positions = self.reorder_buffer.pop(self.ack)
                 frame = self._process_ball_positions(frame, ball_positions)
@@ -194,6 +205,7 @@ class VideoProcessor:
                 ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
                 ball_size = int(abs(ball[0] - ball[2])) * int(abs(ball[1] - ball[3]))
                 update_target_status(self.target_status, ball_center, ball_size)
+
             collision_detected, score, idx = check_target_status(self.target_status, frame)
             if collision_detected and abs(time.time() - self.last_collision_time > self.ball_hit_sec):
                 if score != 0:
@@ -207,12 +219,14 @@ class VideoProcessor:
                         "device_id": encoded_mac,
                         "target_id": idx,
                     }
+                    
                     # 推送得分数据
                     push_thread = threading.Thread(
                         target=push_data,
                         args=(score_data, MAX_RETRY, RETRY_INTERVAL)
                     )
                     push_thread.start()
+
         return frame
 
     def _display_frame(self, frame) -> cv2.Mat:
@@ -222,6 +236,7 @@ class VideoProcessor:
         frame_scale = frame_width / DEFAULT_FRAME_WIDTH
         if frame is not None:
             frame_display = frame.copy()
+
         # 根据比例系数计算文字的位置
         title_org = (int(frame_width * TITLE_ORG_RATIO[0]), int(frame_height * TITLE_ORG_RATIO[1]))
         score_org = (int(frame_width * SCORE_ORG_RATIO[0]), int(frame_height * SCORE_ORG_RATIO[1]))
@@ -230,10 +245,12 @@ class VideoProcessor:
         hint_2_org = (int(frame_width * HINT_2_ORG_RATIO[0]), int(frame_height * HINT_2_ORG_RATIO[1]))
         log_valid_org = (int(frame_width * LOG_VALID_ORG_RATIO[0]), int(frame_height * LOG_VALID_ORG_RATIO[1]))
         log_invalid_org = (int(frame_width * LOG_INVALID_ORG_RATIO[0]), int(frame_height * LOG_INVALID_ORG_RATIO[1]))
+        
         # 获取当前时间和帧率
         current_time = time.time()
         frame_rate = round(1 / (current_time - self.last_frame_time))
         self.last_frame_time = current_time
+        
         # 绘制各种信息
         cv2.putText(
             frame_display, "TENNISv1.0", title_org, cv2.FONT_HERSHEY_SIMPLEX,
@@ -268,12 +285,14 @@ class VideoProcessor:
                 LOG_INVALID_COLOR, int(LOG_THICKNESS * frame_scale)
             )
         cv2.imshow("Video Detection", frame_display)
+
         return frame
 
     def _cleanup(self) -> None:
         self.cap.release()
         if self.video_writer:
             self.video_writer.release()
+
         cv2.destroyAllWindows()
 
 
@@ -282,10 +301,12 @@ def cam_proc(frame_queue, result_queue):
     if len(sys.argv) < 2:
         print("Usage: python3 main.py <video_path or image_path or 0 for stream> [output_path (optional)]")
         sys.exit(1)
+
     input_path = sys.argv[1]
     output_path = None
     if len(sys.argv) > 2:
         output_path = sys.argv[2]
+
     server_thread = threading.Thread(target=network_check)
     server_thread.daemon = True
     server_thread.start()
@@ -323,12 +344,14 @@ def detect_proc(frame_queue, result_queue):
         outputs = model.run([img])
         if outputs is not None:
             boxes, _, scores = post_process(outputs)
+
         if boxes is not None:
             boxes = co_helper.get_real_box(boxes)
             for i, box in enumerate(boxes):
                 if scores[i] > ball_conf:
                     top, left, right, bottom = box
                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
+
         return ball_positions
 
     def worker():
@@ -338,6 +361,8 @@ def detect_proc(frame_queue, result_queue):
             task_id, frame = frame_queue.get()
             if frame is None:
                 continue
+            
+            # 进行检测并推送得分数据
             ball_positions = process_frame(frame, model, co_helper)
             if not result_queue.full():
                 result_queue.put((task_id, ball_positions))
@@ -351,6 +376,7 @@ def detect_proc(frame_queue, result_queue):
         thread.daemon = True
         thread.start()
         threads.append(thread)
+
     # 等待线程结束
     for thread in threads:
         thread.join()

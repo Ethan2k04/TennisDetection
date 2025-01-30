@@ -26,28 +26,8 @@ RETARGET_WAIT_SEC = 1
 # 等待多少秒判断碰撞
 BALL_HIT_WAIT_SEC = 3
 
-# 至少多少个点开启碰撞检测
-MIN_DETECTION_SAMPLE = 6
-
-# 判断是否为碰撞的直线拟合阈值
-NONLINEAR_THRESHOLD = 6
-
-# 判断速度突变点是否为碰撞点的角度阈值
-ANGLE_THRESHOLD = 25
-
-# 判断是否是速度突变点的前后速度比例阈值
-VELOCITY_RATIO_THRESHOLD = 1.5
-
-# 判断是否发生加速度突变
-ACCELERATION_THRESHOLD = 0.98
-
 # 轨迹分割时间间隔
 TRAJECTORY_SPLIT_INTERVAL = 0.5
-
-# 标靶检测形态学操作参数
-REFINE_KSIZE = 12
-ERODE_KSIZE = 4
-ERODE_ITER = 3
 
 # 靶标排序权重
 X_COOR_WEIGHT = 3
@@ -116,20 +96,10 @@ PERI_BIAS = 0.2
 # 网球置信度
 BALL_CONF = 0.1
 
-# 标靶置信度
-TARGET_CONF = 0.1
-
-# 过滤小面积靶标识别结果（占最大识别结果的百分比）
-AREA_THRESHOLD_PERCENTAGE = 10
-
 # 模型相关参数
 OBJ_THRESH = 0.10
 NMS_THRESH = 0.45
 TENNIS_MODEL_PATH = "model/best-tennis-s-relu.rknn"
-TARGET_MODEL_PATH = "model/best-digit-s-relu.rknn"
-MODEL_IMGSIZE = 320
 IMG_SIZE = (640, 640)
 TENNIS_CLASSES = ("ball",)
 TENNIS_ID_LIST = [1]
-TARGET_CLASSES = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
-TARGET_ID_LIST = [1, 2, 3, 4, 5, 6, 7, 8, 9]

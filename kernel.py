@@ -207,8 +207,7 @@ def has_minimum(sizes):
 
 def trajectory_fitting(trajectory, size, frame):
     """
-    根据 trajectory 轨迹判断是否发生碰撞。
-    angle_threshold: 角度变化的阈值，单位为度
+    根据 size 数组的大小变化判断是否发生碰撞
     """
     x = trajectory[:, 0]
     y = trajectory[:, 1]
