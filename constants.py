@@ -17,6 +17,9 @@ SIZE_FILE = "size_data.txt"
 # yolo 检测开启的线程数
 NUM_THREAD = 4
 
+# yolo检测开启的进程数
+NUM_PROCESSES = 4
+
 # 进程间传输队列的大小
 MAX_QUEUE = 100
 

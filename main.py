@@ -25,7 +25,7 @@ from constants import (
     TITLE_COLOR, TITLE_SCALE, TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT,
     TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO,
     HINT_2_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO,
-    DEFAULT_FRAME_WIDTH, IMG_SIZE, TENNIS_MODEL_PATH, BALL_CONF, NUM_THREAD,
+    DEFAULT_FRAME_WIDTH, IMG_SIZE, TENNIS_MODEL_PATH, BALL_CONF, NUM_PROCESSES,
     MAX_QUEUE
 )
 
@@ -354,7 +354,7 @@ def detect_proc(frame_queue, result_queue):
 
         return ball_positions
 
-    def worker():
+    def worker(frame_queue, result_queue):
         model = init_model()
         co_helper = init_co_helper()
         while True:
@@ -367,19 +367,18 @@ def detect_proc(frame_queue, result_queue):
             if not result_queue.full():
                 result_queue.put((task_id, ball_positions))
 
+    # 启动多个进程进行检测
+    num_processes = NUM_PROCESSES
+    processes = []
+    for _ in range(num_processes):
+        process = mp.Process(target=worker, args=(frame_queue, result_queue))
+        process.daemon = True
+        process.start()
+        processes.append(process)
 
-    # 启动多个线程进行检测
-    num_threads = NUM_THREAD
-    threads = []
-    for _ in range(num_threads):
-        thread = threading.Thread(target=worker)
-        thread.daemon = True
-        thread.start()
-        threads.append(thread)
-
-    # 等待线程结束
-    for thread in threads:
-        thread.join()
+    # 等待进程结束
+    for process in processes:
+        process.join()
         
 
 if __name__ == "__main__":
