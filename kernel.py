@@ -198,6 +198,7 @@ def has_minimum(sizes):
     if len(sizes) < 3:
         return False  # 数组长度小于3，无法形成极小值
 
+    # 判断某点是否为局部最小值，并且是全局前三小的
     for i in range(1, len(sizes) - 1):
         if sizes[i] < sizes[i - 1] and sizes[i] < sizes[i + 1] and sizes[i] <= sorted(sizes)[2]:
             return True  # 找到极小值
