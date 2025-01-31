@@ -310,18 +310,20 @@ class VideoProcessor:
 
 # 摄像头进程
 def cam_proc(frame_queue, result_queue):
+    # 如果没有传递参数，则默认 input_path 为 "0"
     if len(sys.argv) < 2:
-        print("Usage: python3 main.py <video_path or image_path or 0 for stream> [output_path (optional)]")
-        sys.exit(1)
-
-    input_path = sys.argv[1]
-    output_path = None
-    if len(sys.argv) > 2:
-        output_path = sys.argv[2]
+        input_path = "0"  # 默认使用摄像头
+        output_path = None
+    else:
+        input_path = sys.argv[1]
+        output_path = None
+        if len(sys.argv) > 2:
+            output_path = sys.argv[2]
 
     server_thread = threading.Thread(target=network_check)
     server_thread.daemon = True
     server_thread.start()
+
     if input_path.endswith(('.mp4', '.avi', '.mov')):
         if output_path:
             processor = VideoProcessor(input_source=input_path, output_path=output_path)
