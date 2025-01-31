@@ -218,7 +218,7 @@ def trajectory_fitting(trajectory, size, frame):
         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
     # 将 size 数组存储到本地文件
-    save_size_to_file(size)
+    # save_size_to_file(size)
 
     # 检测 size 数组中是否存在极小值
     if has_minimum(size):
