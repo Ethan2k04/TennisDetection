@@ -156,16 +156,6 @@ class VideoProcessor:
         else:
             self.video_writer = None
 
-    def adjust_brightness(self, frame):
-        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        l = clahe.apply(l)
-        lab = cv2.merge((l, a, b))
-        frame = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-        
-        return frame
-
     def process_stream(self, frame_queue, result_queue) -> None:
         while True:
             ret, frame = self.cap.read()
@@ -176,9 +166,6 @@ class VideoProcessor:
             if not ret:
                 log_with_timestamp("\033[93mEnd of video or failed to grab frame\033[0m")
                 break
-
-            # 亮度修正
-            frame = self.adjust_brightness(frame)
 
             if not frame_queue.full():
                 frame_queue.put((self.task_id, raw_frame))
@@ -381,6 +368,16 @@ def detect_proc(frame_queue, result_queue):
 
         return ball_positions
 
+    def adjust_brightness(frame):
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        lab = cv2.merge((l, a, b))
+        frame = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        
+        return frame
+    
     def worker(frame_queue, result_queue):
         model = init_model()
         co_helper = init_co_helper()
@@ -389,6 +386,9 @@ def detect_proc(frame_queue, result_queue):
             if frame is None:
                 continue
             
+            # 亮度修正
+            frame = adjust_brightness(frame)
+
             # 进行检测并推送得分数据
             ball_positions = process_frame(frame, model, co_helper)
             if not result_queue.full():
