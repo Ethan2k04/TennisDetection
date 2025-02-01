@@ -35,6 +35,17 @@ mac = uuid.getnode()
 mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8))
 
 
+def adjust_brightness(frame):
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        lab = cv2.merge((l, a, b))
+        frame = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        
+        return frame
+
+
 # 目标管理类
 class TargetManager:
     def __init__(self):
@@ -54,6 +65,8 @@ class TargetManager:
     def relocate_target(self, frame, retarget_wait_sec: float) -> bool:
         if (not self.is_target_set or self.force_retarget) and \
                 time.time() - self.last_relocate_time > retarget_wait_sec:
+	    # 亮度修正
+            frame = adjust_brightness(frame)
             target_result = detect_target(frame)
             self.last_relocate_time = time.time()
             if is_target_result_valid(target_result, self.num_target):
@@ -367,16 +380,6 @@ def detect_proc(frame_queue, result_queue):
                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
         return ball_positions
-
-    def adjust_brightness(frame):
-        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        l = clahe.apply(l)
-        lab = cv2.merge((l, a, b))
-        frame = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
-        
-        return frame
     
     def worker(frame_queue, result_queue):
         model = init_model()
@@ -387,7 +390,7 @@ def detect_proc(frame_queue, result_queue):
                 continue
             
             # 亮度修正
-            frame = adjust_brightness(frame)
+            # frame = adjust_brightness(frame)
 
             # 进行检测并推送得分数据
             ball_positions = process_frame(frame, model, co_helper)

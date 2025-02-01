@@ -97,7 +97,7 @@ MIN_POLY = 5
 PERI_BIAS = 0.2
 
 # 网球置信度
-BALL_CONF = 0.1
+BALL_CONF = 0.05
 
 # 模型相关参数
 OBJ_THRESH = 0.10
