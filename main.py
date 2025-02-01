@@ -156,6 +156,17 @@ class VideoProcessor:
         else:
             self.video_writer = None
 
+    def adjust_brightness(self, frame):
+        # 将图像转换为灰度图
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # 使用CLAHE进行自适应直方图均衡化
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        gray = clahe.apply(gray)
+        
+        # 将灰度图转换回BGR格式
+        return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
     def process_stream(self, frame_queue, result_queue) -> None:
         while True:
             ret, frame = self.cap.read()
@@ -166,6 +177,9 @@ class VideoProcessor:
             if not ret:
                 log_with_timestamp("\033[93mEnd of video or failed to grab frame\033[0m")
                 break
+
+            # 亮度修正
+            frame = self.adjust_brightness(frame)
 
             if not frame_queue.full():
                 frame_queue.put((self.task_id, raw_frame))
