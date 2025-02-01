@@ -265,7 +265,7 @@ class VideoProcessor:
         
         # 绘制各种信息
         cv2.putText(
-            frame_display, "TENNISv1.0", title_org, cv2.FONT_HERSHEY_SIMPLEX,
+            frame_display, "TENNISv1.1", title_org, cv2.FONT_HERSHEY_SIMPLEX,
             TITLE_SCALE * frame_scale, TITLE_COLOR, int(TITLE_THICKNESS * frame_scale)
         )
         cv2.putText(
