@@ -390,7 +390,7 @@ def detect_proc(frame_queue, result_queue):
                 continue
             
             # 亮度修正
-            # frame = adjust_brightness(frame)
+            frame = adjust_brightness(frame)
 
             # 进行检测并推送得分数据
             ball_positions = process_frame(frame, model, co_helper)
