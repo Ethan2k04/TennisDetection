@@ -157,15 +157,14 @@ class VideoProcessor:
             self.video_writer = None
 
     def adjust_brightness(self, frame):
-        # 将图像转换为灰度图
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # 使用CLAHE进行自适应直方图均衡化
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        gray = clahe.apply(gray)
+        l = clahe.apply(l)
+        lab = cv2.merge((l, a, b))
+        frame = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
         
-        # 将灰度图转换回BGR格式
-        return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        return frame
 
     def process_stream(self, frame_queue, result_queue) -> None:
         while True:
