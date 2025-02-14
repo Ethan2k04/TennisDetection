@@ -12,7 +12,8 @@ import numpy as np
 from network import push_data, network_check
 from kernel import (
     detect_target, is_target_result_valid, build_target_status,
-    update_target_status, draw_target_boxes, draw_ball_boxes, check_target_status
+    update_target_status, draw_target_boxes, draw_ball_boxes, check_target_status,
+    make_binary_bitmap_from_frame, find_tenis_ball
 )
 from tools import save_target_to_config, log_with_timestamp
 from py_utils.coco_utils import COCO_test_helper
@@ -25,8 +26,8 @@ from constants import (
     TITLE_COLOR, TITLE_SCALE, TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT,
     TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO,
     HINT_2_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO,
-    DEFAULT_FRAME_WIDTH, IMG_SIZE, TENNIS_MODEL_PATH, BALL_CONF, NUM_PROCESSES,
-    MAX_QUEUE
+    DEFAULT_FRAME_WIDTH, DEFAULT_FRAME_HEIGHT, IMG_SIZE, TENNIS_MODEL_PATH,
+    BALL_CONF, NUM_PROCESSES, MAX_QUEUE
 )
 
 
@@ -52,8 +53,8 @@ class TargetManager:
         self.num_target = 0
         self.target_data = {}
         self.is_target_set = True
-        self.force_retarget = False
-        self.last_relocate_time = time.time()
+        self.force_relocate = False
+        self.last_locate_time = time.time()
         self.target_saved_time = time.strftime('%Y-%m-%d %H:%M:%S')
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, 'r') as file:
@@ -62,13 +63,13 @@ class TargetManager:
         else:
             self.num_target = 0
 
-    def relocate_target(self, frame, retarget_wait_sec: float) -> bool:
-        if (not self.is_target_set or self.force_retarget) and \
-                time.time() - self.last_relocate_time > retarget_wait_sec:
+    def _locate_target(self, frame, retarget_wait_sec: float) -> bool:
+        if (not self.is_target_set or self.force_relocate) and \
+                time.time() - self.last_locate_time > retarget_wait_sec:
 	    # 亮度修正
             frame = adjust_brightness(frame)
             target_result = detect_target(frame)
-            self.last_relocate_time = time.time()
+            self.last_locate_time = time.time()
             if is_target_result_valid(target_result, self.num_target):
                 self.target_data = self._parse_target_result(target_result)
                 save_target_to_config(self.target_data)
@@ -77,7 +78,7 @@ class TargetManager:
                     f"\033[92m[Valid] Target saved at {self.target_saved_time}\033[0m"
                 )
                 self.is_target_set = True
-                self.force_retarget = False
+                self.force_relocate = False
 
                 return True
             else:
@@ -126,6 +127,51 @@ class TargetManager:
         }
 
         return sorted_target_data
+
+    def _calculate_min_enclosing_rectangle(self, frame_width, frame_height, margin: int = 10) -> tuple:
+        """
+        计算能包围所有标靶区域的最小闭包矩形，并在其基础上向外扩张一个margin。
+        
+        :param margin: 向外扩张的像素值，默认为10
+        :return: 返回最小闭包矩形的左上角和右下角坐标 (x1, y1, x2, y2)
+        """
+        if not self.target_data:
+            return None
+
+        # 获取所有标靶的中心点和长短轴长度
+        centers = [(target["center_x"], target["center_y"]) for target in self.target_data.values()]
+        major_axes = [target["major_axis"] for target in self.target_data.values()]
+        minor_axes = [target["minor_axis"] for target in self.target_data.values()]
+
+        # 计算最小闭包矩形的边界
+        x_coords = [center[0] for center in centers]
+        y_coords = [center[1] for center in centers]
+        x1 = min(x_coords) - max(major_axes) / 2 - margin
+        y1 = min(y_coords) - max(minor_axes) / 2 - margin
+        x2 = max(x_coords) + max(major_axes) / 2 + margin
+        y2 = max(y_coords) + max(minor_axes) / 2 + margin
+
+        # 确保矩形边界不超出画面范围
+        x1 = max(0, x1)
+        y1 = max(0, y1)
+        x2 = min(frame_width, x2)
+        y2 = min(frame_height, y2)
+
+        return (x1, y1, x2, y2)
+
+    def draw_enclosing_rectangle(self, frame, margin: int = 10) -> cv2.Mat:
+        """
+        在帧上绘制最小闭包矩形。
+        
+        :param frame: 输入帧
+        :param margin: 向外扩张的像素值，默认为10
+        :return: 绘制了最小闭包矩形的帧
+        """
+        rect = self._calculate_min_enclosing_rectangle(frame.shape[1], frame.shape[0], margin)
+        if rect:
+            x1, y1, x2, y2 = rect
+            cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+        return frame
 
 
 # 视频处理类
@@ -184,7 +230,7 @@ class VideoProcessor:
                 frame_queue.put((self.task_id, raw_frame))
                 self.task_id = (self.task_id + 1) % MAX_QUEUE
                 
-            if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
+            if self.target_manager._locate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
                     self.config = json.load(file)
                     self.target_status = build_target_status(self.config)
@@ -198,7 +244,7 @@ class VideoProcessor:
             if key & 0xFF == ord('q'):
                 break
             elif key & 0xFF == ord('h'):
-                self.target_manager.force_retarget = True
+                self.target_manager.force_relocate = True
 
         self._cleanup()
 
@@ -212,6 +258,8 @@ class VideoProcessor:
                 self.ack = (self.ack + 1) % MAX_QUEUE
 
         frame = draw_target_boxes(frame, self.config)
+        frame = self.target_manager.draw_enclosing_rectangle(frame)
+
         return frame
 
     def _process_ball_positions(self, frame, ball_positions) -> cv2.Mat:
@@ -353,7 +401,7 @@ def cam_proc(frame_queue, result_queue):
         sys.exit(1)
 
 
-# yolo11检测进程
+# 网球检测进程
 def detect_proc(frame_queue, result_queue):
     def init_model():
         return setup_model(TENNIS_MODEL_PATH)
