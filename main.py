@@ -128,7 +128,7 @@ class TargetManager:
 
         return sorted_target_data
 
-    def _calculate_min_enclosing_rectangle(self, frame_width, frame_height, margin: int = 10) -> tuple:
+    def _calculate_min_enclosing_rectangle(self, frame_width: int = DEFAULT_FRAME_WIDTH, frame_height: int = DEFAULT_FRAME_HEIGHT, margin: int = 10) -> tuple:
         """
         计算能包围所有标靶区域的最小闭包矩形，并在其基础上向外扩张一个margin。
         
@@ -138,18 +138,32 @@ class TargetManager:
         if not self.target_data:
             return None
 
-        # 获取所有标靶的中心点和长短轴长度
-        centers = [(target["center_x"], target["center_y"]) for target in self.target_data.values()]
-        major_axes = [target["major_axis"] for target in self.target_data.values()]
-        minor_axes = [target["minor_axis"] for target in self.target_data.values()]
+        # 获取所有标靶的轮廓点
+        all_points = []
+        for target in self.target_data.values():
+            # 根据椭圆参数生成轮廓点
+            ellipse_points = cv2.ellipse2Poly(
+                (int(target["center_x"]), int(target["center_y"])),
+                (int(target["major_axis"] / 2), int(target["minor_axis"] / 2)),
+                int(target["angle"]), 0, 360, 10
+            )
+            all_points.extend(ellipse_points)
 
-        # 计算最小闭包矩形的边界
-        x_coords = [center[0] for center in centers]
-        y_coords = [center[1] for center in centers]
-        x1 = min(x_coords) - max(major_axes) / 2 - margin
-        y1 = min(y_coords) - max(minor_axes) / 2 - margin
-        x2 = max(x_coords) + max(major_axes) / 2 + margin
-        y2 = max(y_coords) + max(minor_axes) / 2 + margin
+        # 计算凸包
+        hull = cv2.convexHull(np.array(all_points))
+
+        # 计算最小外接矩形
+        rect = cv2.minAreaRect(hull)
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+
+        # 获取矩形的边界
+        x_coords = [point[0] for point in box]
+        y_coords = [point[1] for point in box]
+        x1 = min(x_coords) - margin
+        y1 = min(y_coords) - margin
+        x2 = max(x_coords) + margin
+        y2 = max(y_coords) + margin
 
         # 确保矩形边界不超出画面范围
         x1 = max(0, x1)
