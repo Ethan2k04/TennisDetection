@@ -12,6 +12,30 @@ from constants import (
 )
 
 
+# will come from config.json
+# target canvas scope
+min_x = 80
+min_y = 63 
+max_x = 601
+max_y = 403
+
+# tenis ball - area - points count
+min_area = 20 
+max_area = 500
+
+# background bright : remove background black
+# range: 0 to 255
+min_value = 80
+max_value = 200
+
+# range: 0 to 179, green 60
+# tennis ball color: can distinguish from canvas background
+min_hue = 30
+max_hue = 50
+
+# remove background white
+max_saturation = 40 
+
 # 从元信息中读取参数
 score_list = []
 num_target = 0
@@ -41,7 +65,6 @@ def draw_ball_boxes(frame, ball_positions):
 
     return frame
 
-
 # 判断轮廓是否为圆形
 def is_circle(contour):
     """
@@ -58,7 +81,6 @@ def is_circle(contour):
 
     # 圆度接近1且面积大于一定阈值
     return circularity > 1.0 - PERI_BIAS and cv2.contourArea(contour) > 100
-
 
 # 检测目标轮廓
 def detect_target(frame):
@@ -100,7 +122,6 @@ def detect_target(frame):
         result[score].append(result_contours[i])
 
     return result
-
 
 # 根据检测结果绘制标靶目标框
 def draw_target_boxes(frame, config):
@@ -151,7 +172,6 @@ def build_target_status(config):
 
     return target_status
 
-
 # 更新靶标内网球识别状态
 def update_target_status(target_status, ball_center, ball_size):
     """
@@ -174,7 +194,6 @@ def update_target_status(target_status, ball_center, ball_size):
 
     return target_status
 
-
 # 检查每个靶标内的网球轨迹状态
 def check_target_status(target_status, frame):
     """
@@ -192,7 +211,6 @@ def check_target_status(target_status, frame):
 
     return False, 0, None
 
-
 def has_minimum(sizes):
     """
     判断 size 数组中是否存在极小值。
@@ -206,7 +224,6 @@ def has_minimum(sizes):
             return True  # 找到极小值
 
     return False  # 没有找到极小值
-
 
 def trajectory_fitting(trajectory, size, frame):
     """
@@ -228,7 +245,6 @@ def trajectory_fitting(trajectory, size, frame):
 
     return False
 
-
 def save_size_to_file(size):
     """
     将 size 数组存储到本地文件。
@@ -237,32 +253,6 @@ def save_size_to_file(size):
         # 将 size 数组转换为字符串，并用逗号分隔
         size_str = ",".join(map(str, size))
         file.write(size_str + "\n")  # 每个 size 数组占一行
-
-
-# will come from config.json
-# target canvas scope
-min_x = 80
-min_y = 63 
-max_x = 601
-max_y = 403
-
-# tenis ball - area - points count
-min_area = 20 
-max_area = 500
-
-# background bright : remove background black
-# range: 0 to 255
-min_value = 80
-max_value = 200
-
-# range: 0 to 179, green 60
-# tennis ball color: can distinguish from canvas background
-min_hue = 30
-max_hue = 50
-
-# remove background white
-max_saturation = 40 
-
 
 # 判断目标结果集合是否符合设定
 def is_target_result_valid(target_result, num_target):
@@ -285,7 +275,6 @@ def make_binary_bitmap_from_frame(frame: np.ndarray) -> np.ndarray:
     # Apply a threshold to the value channel to create a binary bitmap
     # _, binary_bitmap = cv2.threshold(v, 128, 1, cv2.THRESH_BINARY)
     return  make_binary_bitmap(h,s,v)
-
 
 def make_binary_bitmap(h: np.ndarray, s: np.ndarray, v: np.ndarray) -> np.ndarray:
     """
@@ -393,8 +382,7 @@ def add_point(list:List[Tuple[int,int]], point:Tuple[int,int])-> bool:
         
     return False
     
-
-def find_tenis_ball(binary_image: np.ndarray,step_count:int) -> Tuple[bool, Optional[TenisBall]]:
+def find_tenis_ball(binary_image: np.ndarray):
     """
     Find the tennis ball in a binary image.
 
@@ -447,7 +435,7 @@ def find_tenis_ball(binary_image: np.ndarray,step_count:int) -> Tuple[bool, Opti
             width = max_x - min_x
 
             # Create a TenisBall instance
-            tennis_ball = TenisBall(centerx=int(center_x), centery=int(center_y), width=int(width), height=int(height), area=area, step_count=step_count)
+            tennis_ball = [int(max_y), int(min_x), int(max_x), int(min_y)] # TenisBall(centerx=int(center_x), centery=int(center_y), width=int(width), height=int(height), area=area, step_count=step_count)
             return True, tennis_ball
 
     else:

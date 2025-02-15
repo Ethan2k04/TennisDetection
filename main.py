@@ -37,14 +37,14 @@ mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8)
 
 
 def adjust_brightness(frame):
-        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        lab = cv2.cvtColor(frame.copy(), cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         l = clahe.apply(l)
         lab = cv2.merge((l, a, b))
-        frame = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        frame_adjusted = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
         
-        return frame
+        return frame_adjusted
 
 
 # 目标管理类
@@ -67,8 +67,8 @@ class TargetManager:
         if (not self.is_target_set or self.force_relocate) and \
                 time.time() - self.last_locate_time > retarget_wait_sec:
 	    # 亮度修正
-            frame = adjust_brightness(frame)
-            target_result = detect_target(frame)
+            _frame = adjust_brightness(frame)
+            target_result = detect_target(_frame)
             self.last_locate_time = time.time()
             if is_target_result_valid(target_result, self.num_target):
                 self.target_data = self._parse_target_result(target_result)
@@ -440,6 +440,12 @@ def detect_proc(frame_queue, result_queue):
                 if scores[i] > ball_conf:
                     top, left, right, bottom = box
                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
+        else:
+            binary_bitmap = make_binary_bitmap_from_frame(frame)
+            has_ball, box = find_tenis_ball(binary_bitmap)
+            if has_ball:
+                top, left, right, bottom = box
+                ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
         return ball_positions
     
@@ -452,7 +458,7 @@ def detect_proc(frame_queue, result_queue):
                 continue
             
             # 亮度修正
-            frame = adjust_brightness(frame)
+            # frame = adjust_brightness(frame)
 
             # 进行检测并推送得分数据
             ball_positions = process_frame(frame, model, co_helper)
