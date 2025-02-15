@@ -155,7 +155,7 @@ class TargetManager:
         # 计算最小外接矩形
         rect = cv2.minAreaRect(hull)
         box = cv2.boxPoints(rect)
-        box = np.int0(box)
+        box = np.intp(box)
 
         # 获取矩形的边界
         x_coords = [point[0] for point in box]
