@@ -449,6 +449,8 @@ def detect_proc(frame_queue, result_queue):
                 top, left, right, bottom = box
                 ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
+        print("ball positions: ", ball_positions)
+
         return ball_positions
     
     def worker(frame_queue, result_queue):
@@ -463,9 +465,10 @@ def detect_proc(frame_queue, result_queue):
             # frame = adjust_brightness(frame)
 
             # 进行检测并推送得分数据
-            ball_positions = process_frame(frame, model, co_helper)
-            if not result_queue.full():
-                result_queue.put((task_id, ball_positions))
+            if task_id % 8 == 0:
+                ball_positions = process_frame(frame, model, co_helper)
+                if not result_queue.full():
+                    result_queue.put((task_id, ball_positions))
 
     # 启动多个进程进行检测
     num_processes = NUM_PROCESSES
