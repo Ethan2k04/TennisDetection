@@ -435,7 +435,7 @@ def find_tenis_ball(binary_image: np.ndarray):
             width = max_x - min_x
 
             # Create a TenisBall instance
-            tennis_ball = [int(max_y), int(min_x), int(max_x), int(min_y)] # TenisBall(centerx=int(center_x), centery=int(center_y), width=int(width), height=int(height), area=area, step_count=step_count)
+            tennis_ball = [int(center_y - height // 2), int(center_x - width // 2), int(center_x + width // 2), int(center_y + height // 2)] # TenisBall(centerx=int(center_x), centery=int(center_y), width=int(width), height=int(height), area=area, step_count=step_count)
             return True, tennis_ball
 
     else:

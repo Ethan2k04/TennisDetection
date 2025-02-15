@@ -52,7 +52,7 @@ class TargetManager:
     def __init__(self):
         self.num_target = 0
         self.target_data = {}
-        self.is_target_set = True
+        self.is_target_set = False
         self.force_relocate = False
         self.last_locate_time = time.time()
         self.target_saved_time = time.strftime('%Y-%m-%d %H:%M:%S')
@@ -438,12 +438,14 @@ def detect_proc(frame_queue, result_queue):
             boxes = co_helper.get_real_box(boxes)
             for i, box in enumerate(boxes):
                 if scores[i] > ball_conf:
+                    print("Ball detected from YOLO11")
                     top, left, right, bottom = box
                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
         else:
             binary_bitmap = make_binary_bitmap_from_frame(frame)
             has_ball, box = find_tenis_ball(binary_bitmap)
             if has_ball:
+                print("Ball detected from HSV filter")
                 top, left, right, bottom = box
                 ball_positions.append((int(top), int(left), int(right), int(bottom)))
 
