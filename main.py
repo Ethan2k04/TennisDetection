@@ -27,7 +27,7 @@ from constants import (
     TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO,
     HINT_2_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO,
     DEFAULT_FRAME_WIDTH, DEFAULT_FRAME_HEIGHT, IMG_SIZE, TENNIS_MODEL_PATH,
-    BALL_CONF, NUM_PROCESSES, MAX_QUEUE
+    BALL_CONF, NUM_PROCESSES, MAX_QUEUE, NUM_FRAME_PER_YOLO, MAX_IDLE_COUNT
 )
 
 
@@ -35,7 +35,12 @@ from constants import (
 mac = uuid.getnode()
 mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8))
 
+# 闲置/激活状态共享变量
+manager = mp.Manager()
+is_ball_in_target = manager.Value('b', False)
+enclosing_rect = manager.list([0, 0, 0, 0])
 
+# 亮度修正
 def adjust_brightness(frame):
         lab = cv2.cvtColor(frame.copy(), cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
@@ -171,7 +176,7 @@ class TargetManager:
         x2 = min(frame_width, x2)
         y2 = min(frame_height, y2)
 
-        return (x1, y1, x2, y2)
+        return [x1, y1, x2, y2]
 
     def draw_enclosing_rectangle(self, frame, margin: int = 10) -> cv2.Mat:
         """
@@ -183,6 +188,8 @@ class TargetManager:
         """
         rect = self._calculate_min_enclosing_rectangle(frame.shape[1], frame.shape[0], margin)
         if rect:
+            enclosing_rect[:] = rect
+            print("new enclosing rect: ", enclosing_rect)
             x1, y1, x2, y2 = rect
             cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
         return frame
@@ -423,7 +430,7 @@ def detect_proc(frame_queue, result_queue):
     def init_co_helper():
         return COCO_test_helper(enable_letter_box=True)
 
-    def process_frame(frame, model, co_helper):
+    def process_frame(frame, model, co_helper, idle_mode):
         boxes = []
         ball_positions = []
         ball_conf = BALL_CONF
@@ -441,7 +448,11 @@ def detect_proc(frame_queue, result_queue):
                     print("Ball detected from YOLO11")
                     top, left, right, bottom = box
                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
-        else:
+                    x1, y1, x2, y2 = enclosing_rect
+                    if x1 < left < x2 and y1 < top < y2:
+                        print("Ball in target, ACTIVE mode on ...")
+                        is_ball_in_target.value = True
+        elif not idle_mode:
             binary_bitmap = make_binary_bitmap_from_frame(frame)
             has_ball, box = find_tenis_ball(binary_bitmap)
             if has_ball:
@@ -456,6 +467,8 @@ def detect_proc(frame_queue, result_queue):
     def worker(frame_queue, result_queue):
         model = init_model()
         co_helper = init_co_helper()
+        idle_mode = True
+        idle_count = 0
         while True:
             task_id, frame = frame_queue.get()
             if frame is None:
@@ -463,12 +476,26 @@ def detect_proc(frame_queue, result_queue):
             
             # 亮度修正
             # frame = adjust_brightness(frame)
-
+            
             # 进行检测并推送得分数据
-            if task_id % 8 == 0:
-                ball_positions = process_frame(frame, model, co_helper)
+            ball_positions = []
+            if idle_mode:
+                if task_id % NUM_FRAME_PER_YOLO == 0:
+                    ball_positions = process_frame(frame, model, co_helper, idle_mode)
+                    if not result_queue.full():
+                        result_queue.put((task_id, ball_positions))
+            else:
+                ball_positions = process_frame(frame, model, co_helper, idle_mode)
                 if not result_queue.full():
                     result_queue.put((task_id, ball_positions))
+                if ball_positions is []:
+                    idle_count += 1
+                    if idle_count >= MAX_IDLE_COUNT:
+                        print("No ball detected for MAX_IDLE_COUNT frames, switching to IDLE mode...")
+                        idle_mode = False
+                        idle_count = 0
+                else:
+                    idle_count = 0
 
     # 启动多个进程进行检测
     num_processes = NUM_PROCESSES

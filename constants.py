@@ -106,3 +106,9 @@ TENNIS_MODEL_PATH = "model/best-tennis-s-relu.rknn"
 IMG_SIZE = (640, 640)
 TENNIS_CLASSES = ("ball",)
 TENNIS_ID_LIST = [1]
+
+# 闲置时每多少帧进行一次yolo检测
+NUM_FRAME_PER_YOLO = 4
+
+# 激活后最多等待多少帧进入闲置
+MAX_IDLE_COUNT = 120
