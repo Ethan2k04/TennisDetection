@@ -38,6 +38,8 @@ mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8)
 # 闲置/激活状态共享变量
 manager = mp.Manager()
 is_ball_in_target = manager.Value('b', False)
+idle_mode = manager.Value('b', True)
+idle_count = manager.Value('i', 0)
 enclosing_rect = manager.list([0, 0, 0, 0])
 
 # 亮度修正
@@ -467,8 +469,6 @@ def detect_proc(frame_queue, result_queue):
     def worker(frame_queue, result_queue):
         model = init_model()
         co_helper = init_co_helper()
-        idle_mode = True
-        idle_count = 0
         while True:
             task_id, frame = frame_queue.get()
             if frame is None:
@@ -479,27 +479,29 @@ def detect_proc(frame_queue, result_queue):
             
             # 进行检测并推送得分数据
             ball_positions = []
-            if idle_mode:
+            if idle_mode.value == True:
                 if task_id % NUM_FRAME_PER_YOLO == 0:
+                    print("task id [idle]: ", task_id)
                     ball_positions = process_frame(frame, model, co_helper, idle_mode)
                 if is_ball_in_target.value:
-                    idle_mode = False
+                    idle_mode.value = False
                     is_ball_in_target.value = False
                 if not result_queue.full():
                     result_queue.put((task_id, ball_positions))
             else:
+                print("task id [active]: ", task_id)
                 ball_positions = process_frame(frame, model, co_helper, idle_mode)
                 if not result_queue.full():
                     result_queue.put((task_id, ball_positions))
                 if len(ball_positions) == 0:
-                    idle_count += 1
+                    idle_count.value += 1
                     # print("idle count: ", idle_count)
-                    if idle_count >= MAX_IDLE_COUNT:
+                    if idle_count.value >= MAX_IDLE_COUNT:
                         print("No ball detected for MAX_IDLE_COUNT frames, switching to IDLE mode...")
-                        idle_mode = True
-                        idle_count = 0
+                        idle_mode.value = True
+                        idle_count.value = 0
                 else:
-                    idle_count = 0
+                    idle_count.value = 0
 
     # 启动多个进程进行检测
     num_processes = NUM_PROCESSES
