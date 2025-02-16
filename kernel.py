@@ -276,7 +276,7 @@ def make_binary_bitmap_from_frame(frame: np.ndarray) -> np.ndarray:
     # _, binary_bitmap = cv2.threshold(v, 128, 1, cv2.THRESH_BINARY)
     return  make_binary_bitmap(h,s,v)
 
-def make_binary_bitmap(h: np.ndarray, s: np.ndarray, v: np.ndarray) -> np.ndarray:
+def make_binary_bitmap(h: np.ndarray, s: np.ndarray, v: np.ndarray, rect: List) -> np.ndarray:
     """
     Create a binary bitmap based on hue and value thresholds.
 
@@ -284,14 +284,18 @@ def make_binary_bitmap(h: np.ndarray, s: np.ndarray, v: np.ndarray) -> np.ndarra
     h (np.ndarray): Hue channel of the image.
     s (np.ndarray) : staturation channel of image
     v (np.ndarray): Value channel of the image.
+    rect (List): (left, top, right, bottom) range of the targets
    
-
     Returns:
     np.ndarray: Binary bitmap.
     """
 
-    # please aution to use ai to optimize, I try several time but fialure
+    # please aution to use ai to optimize, I try several time but failure
     binary_bitmap = np.ones_like(v)
+
+    # get the range of the targets
+    min_x, min_y, max_x, max_y = rect
+    print("enclosing rect from kernel.py: ", rect)
 
     for (i, j), value in np.ndenumerate(v):
         if i < min_y or i > max_y :
@@ -315,13 +319,12 @@ def make_binary_bitmap(h: np.ndarray, s: np.ndarray, v: np.ndarray) -> np.ndarra
         elif value > max_value or value < min_value:
             binary_bitmap[i, j] = 0
 
-         # Set binary_bitmap to 1 where the conditions are met
-        #  binary_bitmap[(v >= min_value) & (v <= max_value) & (h >= min_hue) & (h <= max_hue)] = 1
+    # Set binary_bitmap to 1 where the conditions are met
+    # binary_bitmap[(v >= min_value) & (v <= max_value) & (h >= min_hue) & (h <= max_hue)] = 1
     # open : erode and dilate, remove noise 
     # kernel = np.ones((5,5), np.uint8)
     kernel = np.ones((3,3), np.uint8)
     opened_bitmap = cv2.morphologyEx(binary_bitmap, cv2.MORPH_OPEN, kernel)
-
 
     return opened_bitmap
 
