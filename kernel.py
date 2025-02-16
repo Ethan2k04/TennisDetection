@@ -265,7 +265,7 @@ def is_target_result_valid(target_result, num_target):
     # 判断总数是否等于 num_target
     return total_contours == num_target
 
-def make_binary_bitmap_from_frame(frame: np.ndarray) -> np.ndarray:
+def make_binary_bitmap_from_frame(frame: np.ndarray, rect: List) -> np.ndarray:
       # Convert the frame to HSV format
     hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
@@ -274,7 +274,7 @@ def make_binary_bitmap_from_frame(frame: np.ndarray) -> np.ndarray:
 
     # Apply a threshold to the value channel to create a binary bitmap
     # _, binary_bitmap = cv2.threshold(v, 128, 1, cv2.THRESH_BINARY)
-    return  make_binary_bitmap(h,s,v)
+    return  make_binary_bitmap(h, s, v, rect)
 
 def make_binary_bitmap(h: np.ndarray, s: np.ndarray, v: np.ndarray, rect: List) -> np.ndarray:
     """
@@ -295,7 +295,6 @@ def make_binary_bitmap(h: np.ndarray, s: np.ndarray, v: np.ndarray, rect: List) 
 
     # get the range of the targets
     min_x, min_y, max_x, max_y = rect
-    print("enclosing rect from kernel.py: ", rect)
 
     for (i, j), value in np.ndenumerate(v):
         if i < min_y or i > max_y :
