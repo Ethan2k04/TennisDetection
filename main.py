@@ -279,7 +279,7 @@ class VideoProcessor:
                 self.ack = (self.ack + 1) % MAX_QUEUE
 
         frame = draw_target_boxes(frame, self.config)
-        frame = self.target_manager.draw_enclosing_rectangle(frame)
+        frame = self.target_manager.draw_enclosing_rectangle(frame, 0)
 
         return frame
 
@@ -448,6 +448,7 @@ def detect_proc(frame_queue, result_queue):
                     print("Ball detected from YOLO11")
                     top, left, right, bottom = box
                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
+                    print("ball positions: ", ball_positions)
                     x1, y1, x2, y2 = enclosing_rect
                     if x1 < left < x2 and y1 < top < y2 and is_ball_in_target.value == False:
                         print("Ball in target, ACTIVE mode on ...")
@@ -459,8 +460,7 @@ def detect_proc(frame_queue, result_queue):
                 print("Ball detected from HSV filter")
                 top, left, right, bottom = box
                 ball_positions.append((int(top), int(left), int(right), int(bottom)))
-
-        print("ball positions: ", ball_positions)
+                print("ball positions: ", ball_positions)
 
         return ball_positions
     
@@ -475,24 +475,28 @@ def detect_proc(frame_queue, result_queue):
                 continue
             
             # 亮度修正
-            # frame = adjust_brightness(frame)
+            frame = adjust_brightness(frame)
             
             # 进行检测并推送得分数据
             ball_positions = []
             if idle_mode:
                 if task_id % NUM_FRAME_PER_YOLO == 0:
                     ball_positions = process_frame(frame, model, co_helper, idle_mode)
+                if is_ball_in_target.value:
+                    idle_mode = False
+                    is_ball_in_target.value = False
                 if not result_queue.full():
                     result_queue.put((task_id, ball_positions))
             else:
                 ball_positions = process_frame(frame, model, co_helper, idle_mode)
                 if not result_queue.full():
                     result_queue.put((task_id, ball_positions))
-                if ball_positions is []:
+                if len(ball_positions) == 0:
                     idle_count += 1
-                    if idle_count >= MAX_IDLE_COUNT and is_ball_in_target.value == True:
+                    # print("idle count: ", idle_count)
+                    if idle_count >= MAX_IDLE_COUNT:
                         print("No ball detected for MAX_IDLE_COUNT frames, switching to IDLE mode...")
-                        idle_mode = False
+                        idle_mode = True
                         idle_count = 0
                 else:
                     idle_count = 0

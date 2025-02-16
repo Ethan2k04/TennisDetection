@@ -14,9 +14,6 @@ SETTINGS_FILE = "meta/settings.json"
 # 存储 size 数组的文件
 SIZE_FILE = "size_data.txt"
 
-# yolo 检测开启的线程数
-NUM_THREAD = 4
-
 # yolo检测开启的进程数
 NUM_PROCESSES = 4
 
@@ -111,4 +108,4 @@ TENNIS_ID_LIST = [1]
 NUM_FRAME_PER_YOLO = 4
 
 # 激活后最多等待多少帧进入闲置
-MAX_IDLE_COUNT = 120
+MAX_IDLE_COUNT = 4
