@@ -8,7 +8,7 @@ from typing import Tuple, Optional, List
 from constants import (
     BALL_COLOR, FONT_SCALE, LINE_THICKNESS, MIN_POLY, SETTINGS_FILE,
     TARGET_COLOR, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL,
-    PERI_BIAS, SIZE_FILE
+    PERI_BIAS
 )
 
 
@@ -165,7 +165,6 @@ def build_target_status(config):
             "height": target_height,
             "score": 0 if value["cls"] == "undef" else int(value["cls"]),
             "trajectory": [],
-            "size": [],
             "has_ball": False,
             "last_update_time": time.time(),
         }
@@ -173,7 +172,7 @@ def build_target_status(config):
     return target_status
 
 # 更新靶标内网球识别状态
-def update_target_status(target_status, ball_center, ball_size):
+def update_target_status(target_status, ball_center):
     """
     根据网球位置更新状态列表。
     """
@@ -189,7 +188,6 @@ def update_target_status(target_status, ball_center, ball_size):
         if ((ball_center[0] - target_center[0]) ** 2) / a ** 2 + ((ball_center[1] - target_center[1]) ** 2) / b ** 2 <= 1:
             status["last_update_time"] = time.time()
             status["trajectory"].append(ball_center)
-            status["size"].append(ball_size)
             status["has_ball"] = True
 
     return target_status
@@ -202,32 +200,17 @@ def check_target_status(target_status, frame):
     for key, value in target_status.items():
         status = target_status[key]
         if time.time() - status["last_update_time"] > TRAJECTORY_SPLIT_INTERVAL and status["has_ball"]:
-            is_collided = trajectory_fitting(np.array(status["trajectory"]), np.array(status["size"]), frame)
+            is_collided = trajectory_fitting(np.array(status["trajectory"]), frame)
             status["trajectory"] = []
-            status["size"] = []
             status["has_ball"] = False
             if is_collided:
                 return True, value["score"], key
 
     return False, 0, None
 
-def has_minimum(sizes):
+def trajectory_fitting(trajectory, frame):
     """
-    判断 size 数组中是否存在极小值。
-    """
-    if len(sizes) < 3:
-        return True  # 数组长度小于3，无法形成极小值
-
-    # 判断某点是否为局部最小值，并且是全局前三小的
-    for i in range(1, len(sizes) - 1):
-        if sizes[i] < sizes[i - 1] and sizes[i] < sizes[i + 1] and sizes[i] <= sorted(sizes)[2]:
-            return True  # 找到极小值
-
-    return False  # 没有找到极小值
-
-def trajectory_fitting(trajectory, size, frame):
-    """
-    根据 size 数组的大小变化判断是否发生碰撞
+    根据 trajectory 数组判断是否发生碰撞
     """
     x = trajectory[:, 0]
     y = trajectory[:, 1]
@@ -236,23 +219,9 @@ def trajectory_fitting(trajectory, size, frame):
     for xi, yi in zip(x, y):
         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
-    # 将 size 数组存储到本地文件
-    # save_size_to_file(size)
-
-    # 检测 size 数组中是否存在极小值
-    if has_minimum(size):
-        return True
+    # TODO: 碰撞检测逻辑
 
     return False
-
-def save_size_to_file(size):
-    """
-    将 size 数组存储到本地文件。
-    """
-    with open(SIZE_FILE, "a") as file:
-        # 将 size 数组转换为字符串，并用逗号分隔
-        size_str = ",".join(map(str, size))
-        file.write(size_str + "\n")  # 每个 size 数组占一行
 
 # 判断目标结果集合是否符合设定
 def is_target_result_valid(target_result, num_target):
@@ -274,7 +243,7 @@ def make_binary_bitmap_from_frame(frame: np.ndarray, rect: List) -> np.ndarray:
 
     # Apply a threshold to the value channel to create a binary bitmap
     # _, binary_bitmap = cv2.threshold(v, 128, 1, cv2.THRESH_BINARY)
-    return  make_binary_bitmap(h, s, v, rect)
+    return make_binary_bitmap(h, s, v, rect)
 
 def make_binary_bitmap(h: np.ndarray, s: np.ndarray, v: np.ndarray, rect: List) -> np.ndarray:
     """

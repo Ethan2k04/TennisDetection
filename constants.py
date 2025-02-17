@@ -11,9 +11,6 @@ CONFIG_FILE = "meta/config.json"
 # SETTINGS 文件名为 settings.json
 SETTINGS_FILE = "meta/settings.json"
 
-# 存储 size 数组的文件
-SIZE_FILE = "size_data.txt"
-
 # yolo检测开启的进程数
 NUM_PROCESSES = 4
 
@@ -24,10 +21,10 @@ MAX_QUEUE = 100
 RETARGET_WAIT_SEC = 1
 
 # 等待多少秒判断碰撞
-BALL_HIT_WAIT_SEC = 3
+BALL_HIT_WAIT_SEC = 2
 
 # 轨迹分割时间间隔
-TRAJECTORY_SPLIT_INTERVAL = 0.5
+TRAJECTORY_SPLIT_INTERVAL = 2
 
 # 靶标排序权重
 X_COOR_WEIGHT = 3

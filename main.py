@@ -291,8 +291,7 @@ class VideoProcessor:
             ball_center = (0, 0)
             for _, ball in enumerate(ball_positions):
                 ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
-                ball_size = int(abs(ball[0] - ball[2])) * int(abs(ball[1] - ball[3]))
-                update_target_status(self.target_status, ball_center, ball_size)
+                update_target_status(self.target_status, ball_center)
 
             collision_detected, score, idx = check_target_status(self.target_status, frame)
             if collision_detected and abs(time.time() - self.last_collision_time > self.ball_hit_sec):
@@ -349,7 +348,7 @@ class VideoProcessor:
         
         # 绘制各种信息
         cv2.putText(
-            frame_display, "TENNISv1.1", title_org, cv2.FONT_HERSHEY_SIMPLEX,
+            frame_display, "TENNISv1.2", title_org, cv2.FONT_HERSHEY_SIMPLEX,
             TITLE_SCALE * frame_scale, TITLE_COLOR, int(TITLE_THICKNESS * frame_scale)
         )
         cv2.putText(
@@ -452,9 +451,12 @@ def detect_proc(frame_queue, result_queue):
                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
                     print("ball positions: ", ball_positions)
                     x1, y1, x2, y2 = enclosing_rect
-                    if x1 < left < x2 and y1 < top < y2 and is_ball_in_target.value == False:
-                        print("Ball in target, ACTIVE mode on ...")
+                    if x1 < left < x2 and y1 < top < y2:
+                        print("detect ball in target ...")
                         is_ball_in_target.value = True
+                    else:
+                        print("detect ball outside target, IDLE counting ...")
+                        is_ball_in_target.value = False
         else:
             binary_bitmap = make_binary_bitmap_from_frame(frame, enclosing_rect)
             has_ball, box = find_tenis_ball(binary_bitmap)
@@ -480,28 +482,30 @@ def detect_proc(frame_queue, result_queue):
             # 进行检测并推送得分数据
             ball_positions = []
             if idle_mode.value == True:
+                # 降低检测频率提高性能
                 if task_id % NUM_FRAME_PER_YOLO == 0:
                     print("task id [idle]: ", task_id)
                     ball_positions = process_frame(frame, model, co_helper, idle_mode)
-                if is_ball_in_target.value:
+                # 当检测到球在靶标区域时进入激活模式
+                if is_ball_in_target.value == True:
+                    print("ACTIVE mode on ...")
                     idle_mode.value = False
-                    is_ball_in_target.value = False
-                if not result_queue.full():
-                    result_queue.put((task_id, ball_positions))
             else:
                 print("task id [active]: ", task_id)
                 ball_positions = process_frame(frame, model, co_helper, idle_mode)
-                if not result_queue.full():
-                    result_queue.put((task_id, ball_positions))
-                if len(ball_positions) == 0:
+                if is_ball_in_target.value == False:
                     idle_count.value += 1
-                    # print("idle count: ", idle_count)
+                    # 当一段时间内没有检测到球时进入闲置模式
                     if idle_count.value >= MAX_IDLE_COUNT:
                         print("No ball detected for MAX_IDLE_COUNT frames, switching to IDLE mode...")
                         idle_mode.value = True
                         idle_count.value = 0
                 else:
                     idle_count.value = 0
+
+            # 将检测结果推送到结果队列
+            if not result_queue.full():
+                result_queue.put((task_id, ball_positions))
 
     # 启动多个进程进行检测
     num_processes = NUM_PROCESSES
