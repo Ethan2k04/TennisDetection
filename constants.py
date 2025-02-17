@@ -106,3 +106,6 @@ NUM_FRAME_PER_YOLO = 4
 
 # 激活后最多等待多少帧进入闲置
 MAX_IDLE_COUNT = 4
+
+# 单调性判别阈值
+MONOTONICITY_THRESHOLD = 3

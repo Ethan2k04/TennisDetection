@@ -8,7 +8,7 @@ from typing import Tuple, Optional, List
 from constants import (
     BALL_COLOR, FONT_SCALE, LINE_THICKNESS, MIN_POLY, SETTINGS_FILE,
     TARGET_COLOR, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL,
-    PERI_BIAS
+    PERI_BIAS, MONOTONICITY_THRESHOLD
 )
 
 
@@ -220,9 +220,24 @@ def trajectory_fitting(trajectory, frame):
     for xi, yi in zip(x, y):
         cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
-    # TODO: 碰撞检测逻辑
-
-    return True
+    # 碰撞检测逻辑
+    if len(trajectory) > 3:
+        # 计算 x 分量的差分
+        dx = np.diff(x)
+        
+        # 判断 x 分量是否单调递增或递减
+        is_monotonic_increasing = np.all(dx >= -MONOTONICITY_THRESHOLD)  # 判断是否单调递增
+        is_monotonic_decreasing = np.all(dx <= MONOTONICITY_THRESHOLD)  # 判断是否单调递减
+        
+        # 如果 x 分量单调递增或递减，则判断为未碰撞
+        if is_monotonic_increasing or is_monotonic_decreasing:
+            return False
+        else:
+            # 否则判断为碰撞
+            return True
+    else:
+        # 如果轨迹点数小于等于3，无法判断趋势，默认判定为碰撞
+        return True
 
 # 判断目标结果集合是否符合设定
 def is_target_result_valid(target_result, num_target):
