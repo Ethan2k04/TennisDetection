@@ -212,6 +212,7 @@ def trajectory_fitting(trajectory, frame):
     """
     根据 trajectory 数组判断是否发生碰撞
     """
+    print("trajectory: ", trajectory)
     x = trajectory[:, 0]
     y = trajectory[:, 1]
 
@@ -221,7 +222,7 @@ def trajectory_fitting(trajectory, frame):
 
     # TODO: 碰撞检测逻辑
 
-    return False
+    return True
 
 # 判断目标结果集合是否符合设定
 def is_target_result_valid(target_result, num_target):

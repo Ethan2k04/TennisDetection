@@ -446,10 +446,10 @@ def detect_proc(frame_queue, result_queue):
             boxes = co_helper.get_real_box(boxes)
             for i, box in enumerate(boxes):
                 if scores[i] > ball_conf:
-                    print("Ball detected from YOLO11")
+                    # print("Ball detected from YOLO11")
                     top, left, right, bottom = box
                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
-                    print("ball positions: ", ball_positions)
+                    # print("ball positions: ", ball_positions)
                     x1, y1, x2, y2 = enclosing_rect
                     if x1 < left < x2 and y1 < top < y2:
                         print("detect ball in target ...")
@@ -461,10 +461,10 @@ def detect_proc(frame_queue, result_queue):
             binary_bitmap = make_binary_bitmap_from_frame(frame, enclosing_rect)
             has_ball, box = find_tenis_ball(binary_bitmap)
             if has_ball:
-                print("Ball detected from HSV filter")
+                # print("Ball detected from HSV filter")
                 top, left, right, bottom = box
                 ball_positions.append((int(top), int(left), int(right), int(bottom)))
-                print("ball positions: ", ball_positions)
+                # print("ball positions: ", ball_positions)
 
         return ball_positions
     
@@ -484,14 +484,14 @@ def detect_proc(frame_queue, result_queue):
             if idle_mode.value == True:
                 # 降低检测频率提高性能
                 if task_id % NUM_FRAME_PER_YOLO == 0:
-                    print("task id [idle]: ", task_id)
+                    # print("task id [idle]: ", task_id)
                     ball_positions = process_frame(frame, model, co_helper, idle_mode)
                 # 当检测到球在靶标区域时进入激活模式
                 if is_ball_in_target.value == True:
                     print("ACTIVE mode on ...")
                     idle_mode.value = False
             else:
-                print("task id [active]: ", task_id)
+                # print("task id [active]: ", task_id)
                 ball_positions = process_frame(frame, model, co_helper, idle_mode)
                 if is_ball_in_target.value == False:
                     idle_count.value += 1
