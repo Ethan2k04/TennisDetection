@@ -11,9 +11,6 @@ CONFIG_FILE = "meta/config.json"
 # SETTINGS 文件名为 settings.json
 SETTINGS_FILE = "meta/settings.json"
 
-# 存储 size 数组的文件
-SIZE_FILE = "size_data.txt"
-
 # yolo 检测开启的线程数
 NUM_THREAD = 4
 
@@ -31,6 +28,9 @@ BALL_HIT_WAIT_SEC = 3
 
 # 轨迹分割时间间隔
 TRAJECTORY_SPLIT_INTERVAL = 0.5
+
+# 轨迹变化判断为碰撞的阈值
+TRAJECTORY_CHANGE_THRESHOLD = 0.5
 
 # 靶标排序权重
 X_COOR_WEIGHT = 3
@@ -108,4 +108,4 @@ TENNIS_CLASSES = ("ball",)
 TENNIS_ID_LIST = [1]
 
 # 每多少帧执行一次 yolo 检测
-FRAME_PER_YOLO = 3
+FRAME_PER_YOLO = 2

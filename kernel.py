@@ -6,7 +6,7 @@ import numpy as np
 from constants import (
     BALL_COLOR, FONT_SCALE, LINE_THICKNESS, MIN_POLY, SETTINGS_FILE,
     TARGET_COLOR, TEXT_MARGIN, TRACE_RADIUS, TRAJECTORY_SPLIT_INTERVAL,
-    PERI_BIAS, SIZE_FILE
+    PERI_BIAS, TRAJECTORY_CHANGE_THRESHOLD
 )
 
 
@@ -142,7 +142,6 @@ def build_target_status(config):
             "height": target_height,
             "score": 0 if value["cls"] == "undef" else int(value["cls"]),
             "trajectory": [],
-            "size": [],
             "has_ball": False,
             "last_update_time": time.time(),
         }
@@ -151,11 +150,11 @@ def build_target_status(config):
 
 
 # 更新靶标内网球识别状态
-def update_target_status(target_status, ball_center, ball_size):
+def update_target_status(target_status, ball_center):
     """
     根据网球位置更新状态列表。
     """
-    for key, value in target_status.items():
+    for key, _ in target_status.items():
         status = target_status[key]
         target_center = status["center"]
         target_width = status["width"]  # 短轴
@@ -167,7 +166,6 @@ def update_target_status(target_status, ball_center, ball_size):
         if ((ball_center[0] - target_center[0]) ** 2) / a ** 2 + ((ball_center[1] - target_center[1]) ** 2) / b ** 2 <= 1:
             status["last_update_time"] = time.time()
             status["trajectory"].append(ball_center)
-            status["size"].append(ball_size)
             status["has_ball"] = True
 
             return True
@@ -183,9 +181,8 @@ def check_target_status(target_status, frame):
     for key, value in target_status.items():
         status = target_status[key]
         if time.time() - status["last_update_time"] > TRAJECTORY_SPLIT_INTERVAL and status["has_ball"]:
-            is_collided = trajectory_fitting(np.array(status["trajectory"]), np.array(status["size"]), frame)
+            is_collided = trajectory_fitting(np.array(status["trajectory"]), frame)
             status["trajectory"] = []
-            status["size"] = []
             status["has_ball"] = False
             if is_collided:
                 return True, value["score"], key
@@ -193,50 +190,46 @@ def check_target_status(target_status, frame):
     return False, 0, None
 
 
-def has_minimum(sizes):
+def trajectory_fitting(trajectory, frame):
     """
-    判断 size 数组中是否存在极小值。
+    根据 trajectory 轨迹判断是否发生碰撞
+    :param trajectory: 网球的运动轨迹，形状为 (N, 2)，N 是轨迹点的数量
+    :param frame: 当前帧图像
+    :return: 是否发生碰撞 (True/False)
     """
-    if len(sizes) < 3:
-        return True  # 数组长度小于3，无法形成极小值
-
-    # 判断某点是否为局部最小值，并且是全局前三小的
-    for i in range(1, len(sizes) - 1):
-        if sizes[i] < sizes[i - 1] and sizes[i] < sizes[i + 1] and sizes[i] <= sorted(sizes)[2]:
-            return True  # 找到极小值
-
-    return False  # 没有找到极小值
-
-
-def trajectory_fitting(trajectory, size, frame):
-    """
-    根据 size 数组的大小变化判断是否发生碰撞
-    """
-    x = trajectory[:, 0]
-    y = trajectory[:, 1]
+    if len(trajectory) < 4:  # 轨迹点太少，无法判断
+        return False
 
     # 绘制轨迹点
-    for xi, yi in zip(x, y):
-        cv2.circle(frame, (xi, yi), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
+    for point in trajectory:
+        cv2.circle(frame, tuple(point.astype(int)), radius=TRACE_RADIUS, color=BALL_COLOR, thickness=-1)
 
-    # 将 size 数组存储到本地文件
-    # save_size_to_file(size)
+    # 计算速度变化
+    last_point = trajectory[-1]  # 最后一个点
+    second_last_point = trajectory[-2]  # 倒数第二个点
+    third_last_point = trajectory[-3]  # 倒数第三个点
 
-    # 检测 size 数组中是否存在极小值
-    if has_minimum(size):
-        return True
+    # 计算速度向量
+    v1 = second_last_point - third_last_point  # 倒数第二个点到倒数第三个点的速度
+    v2 = last_point - second_last_point  # 最后一个点到倒数第二个点的速度
 
-    return False
+    # 归一化速度向量
+    v1_norm = v1 / np.linalg.norm(v1) if np.linalg.norm(v1) != 0 else v1
+    v2_norm = v2 / np.linalg.norm(v2) if np.linalg.norm(v2) != 0 else v2
 
+    # 计算速度叉积和点积
+    v_cross = np.cross(v1_norm, v2_norm)  # 速度方向变化
+    v_dot = np.dot(v1_norm, v2_norm)  # 速度大小变化
 
-def save_size_to_file(size):
-    """
-    将 size 数组存储到本地文件。
-    """
-    with open(SIZE_FILE, "a") as file:
-        # 将 size 数组转换为字符串，并用逗号分隔
-        size_str = ",".join(map(str, size))
-        file.write(size_str + "\n")  # 每个 size 数组占一行
+    # 计算变化量
+    change1 = abs(abs(v_cross) - 0)  # 方向变化量
+    change12 = abs(v_dot - 1)  # 大小变化量
+    change = change1 + change12
+
+    print(f"Change: {change}")
+
+    # 判断是否发生碰撞
+    return change > TRAJECTORY_CHANGE_THRESHOLD  # 如果变化量超过阈值，则认为发生碰撞
 
 
 # 判断目标结果集合是否符合设定

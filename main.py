@@ -224,8 +224,7 @@ class VideoProcessor:
             _is_ball_in_target = False
             for _, ball in enumerate(ball_positions):
                 ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
-                ball_size = int(abs(ball[0] - ball[2])) * int(abs(ball[1] - ball[3]))
-                _is_ball_in_target = update_target_status(self.target_status, ball_center, ball_size)
+                _is_ball_in_target = update_target_status(self.target_status, ball_center)
                 if _is_ball_in_target:
                     is_ball_in_target.set(True)
 
@@ -435,4 +434,3 @@ if __name__ == "__main__":
     detect_process.start()
     cam_process.join()
     detect_process.join()
-    
