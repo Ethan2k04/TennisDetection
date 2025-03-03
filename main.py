@@ -12,8 +12,7 @@ import numpy as np
 from network import push_data, network_check
 from kernel import (
     detect_target, is_target_result_valid, build_target_status,
-    update_target_status, draw_target_boxes, draw_ball_boxes, check_target_status,
-    make_binary_bitmap_from_frame, find_tenis_ball
+    update_target_status, draw_target_boxes, draw_ball_boxes, check_target_status
 )
 from tools import save_target_to_config, log_with_timestamp
 from py_utils.coco_utils import COCO_test_helper
@@ -26,8 +25,8 @@ from constants import (
     TITLE_COLOR, TITLE_SCALE, TITLE_THICKNESS, X_COOR_WEIGHT, Y_COOR_WEIGHT,
     TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO,
     HINT_2_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO,
-    DEFAULT_FRAME_WIDTH, DEFAULT_FRAME_HEIGHT, IMG_SIZE, TENNIS_MODEL_PATH,
-    BALL_CONF, NUM_PROCESSES, MAX_QUEUE, NUM_FRAME_PER_YOLO, MAX_IDLE_COUNT
+    DEFAULT_FRAME_WIDTH, IMG_SIZE, TENNIS_MODEL_PATH, BALL_CONF, NUM_PROCESSES,
+    MAX_QUEUE, FRAME_PER_YOLO
 )
 
 
@@ -35,23 +34,19 @@ from constants import (
 mac = uuid.getnode()
 mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8))
 
-# 闲置/激活状态共享变量
 manager = mp.Manager()
 is_ball_in_target = manager.Value('b', False)
-idle_mode = manager.Value('b', True)
-idle_count = manager.Value('i', 0)
-enclosing_rect = manager.list([0, 0, 0, 0])
 
-# 亮度修正
+
 def adjust_brightness(frame):
-        lab = cv2.cvtColor(frame.copy(), cv2.COLOR_BGR2LAB)
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         l = clahe.apply(l)
         lab = cv2.merge((l, a, b))
-        frame_adjusted = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+        frame = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
         
-        return frame_adjusted
+        return frame
 
 
 # 目标管理类
@@ -59,9 +54,9 @@ class TargetManager:
     def __init__(self):
         self.num_target = 0
         self.target_data = {}
-        self.is_target_set = False
-        self.force_relocate = False
-        self.last_locate_time = time.time()
+        self.is_target_set = True
+        self.force_retarget = False
+        self.last_relocate_time = time.time()
         self.target_saved_time = time.strftime('%Y-%m-%d %H:%M:%S')
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, 'r') as file:
@@ -70,13 +65,13 @@ class TargetManager:
         else:
             self.num_target = 0
 
-    def _locate_target(self, frame, retarget_wait_sec: float) -> bool:
-        if (not self.is_target_set or self.force_relocate) and \
-                time.time() - self.last_locate_time > retarget_wait_sec:
+    def relocate_target(self, frame, retarget_wait_sec: float) -> bool:
+        if (not self.is_target_set or self.force_retarget) and \
+                time.time() - self.last_relocate_time > retarget_wait_sec:
 	    # 亮度修正
-            _frame = adjust_brightness(frame)
-            target_result = detect_target(_frame)
-            self.last_locate_time = time.time()
+            frame = adjust_brightness(frame)
+            target_result = detect_target(frame)
+            self.last_relocate_time = time.time()
             if is_target_result_valid(target_result, self.num_target):
                 self.target_data = self._parse_target_result(target_result)
                 save_target_to_config(self.target_data)
@@ -85,7 +80,7 @@ class TargetManager:
                     f"\033[92m[Valid] Target saved at {self.target_saved_time}\033[0m"
                 )
                 self.is_target_set = True
-                self.force_relocate = False
+                self.force_retarget = False
 
                 return True
             else:
@@ -134,66 +129,6 @@ class TargetManager:
         }
 
         return sorted_target_data
-
-    def _calculate_min_enclosing_rectangle(self, frame_width: int = DEFAULT_FRAME_WIDTH, frame_height: int = DEFAULT_FRAME_HEIGHT, margin: int = 10) -> tuple:
-        """
-        计算能包围所有标靶区域的最小闭包矩形，并在其基础上向外扩张一个margin。
-        
-        :param margin: 向外扩张的像素值，默认为10
-        :return: 返回最小闭包矩形的左上角和右下角坐标 (x1, y1, x2, y2)
-        """
-        if not self.target_data:
-            return None
-
-        # 获取所有标靶的轮廓点
-        all_points = []
-        for target in self.target_data.values():
-            # 根据椭圆参数生成轮廓点
-            ellipse_points = cv2.ellipse2Poly(
-                (int(target["center_x"]), int(target["center_y"])),
-                (int(target["major_axis"] / 2), int(target["minor_axis"] / 2)),
-                int(target["angle"]), 0, 360, 10
-            )
-            all_points.extend(ellipse_points)
-
-        # 计算凸包
-        hull = cv2.convexHull(np.array(all_points))
-
-        # 计算最小外接矩形
-        rect = cv2.minAreaRect(hull)
-        box = cv2.boxPoints(rect)
-        box = np.intp(box)
-
-        # 获取矩形的边界
-        x_coords = [point[0] for point in box]
-        y_coords = [point[1] for point in box]
-        x1 = min(x_coords) - margin
-        y1 = min(y_coords) - margin
-        x2 = max(x_coords) + margin
-        y2 = max(y_coords) + margin
-
-        # 确保矩形边界不超出画面范围
-        x1 = max(0, x1)
-        y1 = max(0, y1)
-        x2 = min(frame_width, x2)
-        y2 = min(frame_height, y2)
-
-        return [x1, y1, x2, y2]
-
-    def draw_enclosing_rectangle(self, frame, margin: int = 10) -> cv2.Mat:
-        """
-        在帧上绘制最小闭包矩形。
-        
-        :param frame: 输入帧
-        :param margin: 向外扩张的像素值，默认为10
-        :return: 绘制了最小闭包矩形的帧
-        """
-        rect = self._calculate_min_enclosing_rectangle(frame.shape[1], frame.shape[0], margin)
-        if rect:
-            enclosing_rect[:] = rect
-            x1, y1, x2, y2 = rect
-            cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-        return frame
 
 
 # 视频处理类
@@ -252,7 +187,7 @@ class VideoProcessor:
                 frame_queue.put((self.task_id, raw_frame))
                 self.task_id = (self.task_id + 1) % MAX_QUEUE
                 
-            if self.target_manager._locate_target(frame, retarget_wait_sec=self.retarget_sec):
+            if self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
                 with open(CONFIG_FILE, 'r') as file:
                     self.config = json.load(file)
                     self.target_status = build_target_status(self.config)
@@ -266,14 +201,13 @@ class VideoProcessor:
             if key & 0xFF == ord('q'):
                 break
             elif key & 0xFF == ord('h'):
-                self.target_manager.force_relocate = True
+                self.target_manager.force_retarget = True
 
         self._cleanup()
 
     def _update_score(self, frame, result_queue) -> cv2.Mat:
         if not result_queue.empty():
             task_id, ball_positions = result_queue.get()
-            # frame = self._process_ball_positions(frame, ball_positions)
             self.reorder_buffer[task_id] = ball_positions
             while self.ack in self.reorder_buffer:
                 ball_positions = self.reorder_buffer.pop(self.ack)
@@ -281,17 +215,22 @@ class VideoProcessor:
                 self.ack = (self.ack + 1) % MAX_QUEUE
 
         frame = draw_target_boxes(frame, self.config)
-        frame = self.target_manager.draw_enclosing_rectangle(frame, 0)
-
         return frame
 
     def _process_ball_positions(self, frame, ball_positions) -> cv2.Mat:
         frame = draw_ball_boxes(frame, ball_positions)
         if len(self.target_status.keys()) > 0:
             ball_center = (0, 0)
+            _is_ball_in_target = False
             for _, ball in enumerate(ball_positions):
                 ball_center = (int((ball[0] + ball[2]) / 2), int((ball[1] + ball[3]) / 2))
-                update_target_status(self.target_status, ball_center)
+                ball_size = int(abs(ball[0] - ball[2])) * int(abs(ball[1] - ball[3]))
+                _is_ball_in_target = update_target_status(self.target_status, ball_center, ball_size)
+                if _is_ball_in_target:
+                    is_ball_in_target.set(True)
+
+            if not _is_ball_in_target:
+                is_ball_in_target.set(False)
 
             collision_detected, score, idx = check_target_status(self.target_status, frame)
             if collision_detected and abs(time.time() - self.last_collision_time > self.ball_hit_sec):
@@ -348,7 +287,7 @@ class VideoProcessor:
         
         # 绘制各种信息
         cv2.putText(
-            frame_display, "TENNISv1.2", title_org, cv2.FONT_HERSHEY_SIMPLEX,
+            frame_display, "TENNISv1.1", title_org, cv2.FONT_HERSHEY_SIMPLEX,
             TITLE_SCALE * frame_scale, TITLE_COLOR, int(TITLE_THICKNESS * frame_scale)
         )
         cv2.putText(
@@ -423,7 +362,7 @@ def cam_proc(frame_queue, result_queue):
         sys.exit(1)
 
 
-# 网球检测进程
+# yolo11检测进程
 def detect_proc(frame_queue, result_queue):
     def init_model():
         return setup_model(TENNIS_MODEL_PATH)
@@ -431,7 +370,7 @@ def detect_proc(frame_queue, result_queue):
     def init_co_helper():
         return COCO_test_helper(enable_letter_box=True)
 
-    def process_frame(frame, model, co_helper, idle_mode):
+    def process_frame(frame, model, co_helper):
         boxes = []
         ball_positions = []
         ball_conf = BALL_CONF
@@ -446,25 +385,8 @@ def detect_proc(frame_queue, result_queue):
             boxes = co_helper.get_real_box(boxes)
             for i, box in enumerate(boxes):
                 if scores[i] > ball_conf:
-                    # print("Ball detected from YOLO11")
                     top, left, right, bottom = box
                     ball_positions.append((int(top), int(left), int(right), int(bottom)))
-                    # print("ball positions: ", ball_positions)
-                    x1, y1, x2, y2 = enclosing_rect
-                    if x1 < left < x2 and y1 < top < y2:
-                        print("detect ball in target ...")
-                        is_ball_in_target.value = True
-                    else:
-                        print("detect ball outside target, IDLE counting ...")
-                        is_ball_in_target.value = False
-        else:
-            binary_bitmap = make_binary_bitmap_from_frame(frame, enclosing_rect)
-            has_ball, box = find_tenis_ball(binary_bitmap)
-            if has_ball:
-                # print("Ball detected from HSV filter")
-                top, left, right, bottom = box
-                ball_positions.append((int(top), int(left), int(right), int(bottom)))
-                # print("ball positions: ", ball_positions)
 
         return ball_positions
     
@@ -478,32 +400,15 @@ def detect_proc(frame_queue, result_queue):
             
             # 亮度修正
             frame = adjust_brightness(frame)
-            
+
             # 进行检测并推送得分数据
             ball_positions = []
-            if idle_mode.value == True:
-                # 降低检测频率提高性能
-                if task_id % NUM_FRAME_PER_YOLO == 0:
-                    # print("task id [idle]: ", task_id)
-                    ball_positions = process_frame(frame, model, co_helper, idle_mode)
-                # 当检测到球在靶标区域时进入激活模式
-                if is_ball_in_target.value == True:
-                    print("ACTIVE mode on ...")
-                    idle_mode.value = False
+            if is_ball_in_target.get() == False:
+                if task_id % FRAME_PER_YOLO == 0:
+                    ball_positions = process_frame(frame, model, co_helper)
             else:
-                # print("task id [active]: ", task_id)
-                ball_positions = process_frame(frame, model, co_helper, idle_mode)
-                if is_ball_in_target.value == False:
-                    idle_count.value += 1
-                    # 当一段时间内没有检测到球时进入闲置模式
-                    if idle_count.value >= MAX_IDLE_COUNT:
-                        print("No ball detected for MAX_IDLE_COUNT frames, switching to IDLE mode...")
-                        idle_mode.value = True
-                        idle_count.value = 0
-                else:
-                    idle_count.value = 0
+                ball_positions = process_frame(frame, model, co_helper)
 
-            # 将检测结果推送到结果队列
             if not result_queue.full():
                 result_queue.put((task_id, ball_positions))
 

@@ -11,6 +11,12 @@ CONFIG_FILE = "meta/config.json"
 # SETTINGS 文件名为 settings.json
 SETTINGS_FILE = "meta/settings.json"
 
+# 存储 size 数组的文件
+SIZE_FILE = "size_data.txt"
+
+# yolo 检测开启的线程数
+NUM_THREAD = 4
+
 # yolo检测开启的进程数
 NUM_PROCESSES = 4
 
@@ -21,10 +27,10 @@ MAX_QUEUE = 100
 RETARGET_WAIT_SEC = 1
 
 # 等待多少秒判断碰撞
-BALL_HIT_WAIT_SEC = 2
+BALL_HIT_WAIT_SEC = 3
 
 # 轨迹分割时间间隔
-TRAJECTORY_SPLIT_INTERVAL = 2
+TRAJECTORY_SPLIT_INTERVAL = 0.5
 
 # 靶标排序权重
 X_COOR_WEIGHT = 3
@@ -91,7 +97,7 @@ MIN_POLY = 5
 PERI_BIAS = 0.2
 
 # 网球置信度
-BALL_CONF = 0.05
+BALL_CONF = 0.2
 
 # 模型相关参数
 OBJ_THRESH = 0.10
@@ -101,11 +107,5 @@ IMG_SIZE = (640, 640)
 TENNIS_CLASSES = ("ball",)
 TENNIS_ID_LIST = [1]
 
-# 闲置时每多少帧进行一次yolo检测
-NUM_FRAME_PER_YOLO = 4
-
-# 激活后最多等待多少帧进入闲置
-MAX_IDLE_COUNT = 4
-
-# 单调性判别阈值
-MONOTONICITY_THRESHOLD = 3
+# 每多少帧执行一次 yolo 检测
+FRAME_PER_YOLO = 3
