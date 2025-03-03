@@ -198,7 +198,7 @@ def trajectory_fitting(trajectory, frame):
     :return: 是否发生碰撞 (True/False)
     """
     if len(trajectory) < 4:  # 轨迹点太少，无法判断
-        return False
+        return True
 
     # 绘制轨迹点
     for point in trajectory:
