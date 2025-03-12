@@ -5,6 +5,7 @@
 /test_data/
 
 /.idea/
+/venv/
 
 *.mp4
 

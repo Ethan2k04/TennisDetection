@@ -9,7 +9,7 @@ import urllib.parse
 import multiprocessing as mp
 import numpy as np
 
-from network import push_data, network_check
+from network import push_data, network_check,push_data_worker,push_data_async
 from kernel import (
     detect_target, is_target_result_valid, build_target_status,
     update_target_status, draw_target_boxes, draw_ball_boxes, check_target_status
@@ -246,11 +246,13 @@ class VideoProcessor:
                     }
                     
                     # 推送得分数据
-                    push_thread = threading.Thread(
-                        target=push_data,
-                        args=(score_data, MAX_RETRY, RETRY_INTERVAL)
-                    )
-                    push_thread.start()
+                    # push_thread = threading.Thread(
+                    #     target=push_data,
+                    #     args=(score_data, MAX_RETRY, RETRY_INTERVAL)
+                    # )
+                    # push_thread.start()
+                    push_data_async(score_data)
+
 
         return frame
 
@@ -344,6 +346,11 @@ def cam_proc(frame_queue, result_queue):
     server_thread = threading.Thread(target=network_check)
     server_thread.daemon = True
     server_thread.start()
+
+    # thread is to push data to server
+    push_data_thread = threading.Thread(target=push_data_worker)
+    push_data_thread.daemon = True
+    push_data_thread.start()
 
     if input_path.endswith(('.mp4', '.avi', '.mov')):
         if output_path:
