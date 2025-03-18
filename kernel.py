@@ -118,10 +118,10 @@ def draw_target_boxes(frame, config):
         cv2.ellipse(frame, (x, y), (minor_axis // 2, major_axis // 2), 0, 0, 360, TARGET_COLOR, LINE_THICKNESS)
 
         # 在框旁边显示标签
-        cv2.putText(
-            frame, label, text_position, cv2.FONT_HERSHEY_SIMPLEX,
-            FONT_SCALE, TARGET_COLOR, LINE_THICKNESS
-        )
+        # cv2.putText(
+        #     frame, label, text_position, cv2.FONT_HERSHEY_SIMPLEX,
+        #     FONT_SCALE, TARGET_COLOR, LINE_THICKNESS
+        # )
 
     return frame
 

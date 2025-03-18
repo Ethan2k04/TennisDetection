@@ -40,7 +40,7 @@ Y_COOR_WEIGHT = 10
 RANDOM_STATE = 42
 
 # 框线和文字的粗细
-LINE_THICKNESS = 5
+LINE_THICKNESS = 2
 FONT_SCALE = 1
 
 # 框线和文字颜色
@@ -109,3 +109,6 @@ TENNIS_ID_LIST = [1]
 
 # 每多少帧执行一次 yolo 检测
 FRAME_PER_YOLO = 2
+
+#目标边框边缘
+TARGET_ROI_MARGIN = 20
