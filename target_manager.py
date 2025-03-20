@@ -7,18 +7,15 @@ from pprint import pprint
 from dataclasses import dataclass
 import numpy as np
 import math
+import uuid
+import urllib.parse
 from pprint import pprint
-
-from kernel import (
-    detect_target, is_target_result_valid, build_target_status,
-)
-
-from tools import save_target_to_config, log_with_timestamp
-
-
+from tools import  log_with_timestamp
 from constants import (
-    SETTINGS_FILE,X_COOR_WEIGHT, Y_COOR_WEIGHT, CONFIG_FILE,TARGET_COLOR,LINE_THICKNESS,TARGET_ROI_MARGIN,TEXT_MARGIN,FONT_SCALE
+    SETTINGS_FILE,X_COOR_WEIGHT, Y_COOR_WEIGHT, CONFIG_FILE,TARGET_COLOR,LINE_THICKNESS,TARGET_ROI_MARGIN,TEXT_MARGIN,FONT_SCALE,
+    MIN_POLY, PERI_BIAS
 )
+
 
 # ----------------------------------------------------------
 # 目标区域
@@ -135,9 +132,6 @@ class TargetManager:
         self.last_relocate_time = time.time()
         self.target_saved_time = time.strftime('%Y-%m-%d %H:%M:%S')
 
-        # hit sum up score 
-        self.score_player  = 0
-
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, 'r') as file:
                 settings = json.load(file)
@@ -145,6 +139,16 @@ class TargetManager:
                 self.num_target = len(self.target_scores)
         else:
             self.num_target = 0
+
+         # hit sum up score 
+        self.score_player  = 0
+
+        #for hit the score target, and push to server need data
+        self.hit_x: int = 0
+        self.hit_y : int = 0
+        self.hit_score:int = 0
+        self.device_id = urllib.parse.quote(TargetManager.get_mac_address())
+        self.hit_target_id = 1
 
 
     def calc_target_region(self):
@@ -234,11 +238,11 @@ class TargetManager:
                
 	    # 亮度修正
         frame = self._adjust_brightness(frame)
-        target_result = detect_target(frame)
+        target_result = self._detect_target(frame)
         self.last_relocate_time = time.time()
         # print(target_result)
 
-        if is_target_result_valid(target_result, self.num_target):
+        if self._is_target_result_valid(target_result, self.num_target):
             target_data = self._parse_target_result(target_result)
             targets_dict = self._validate_target_result(target_data)
             if targets_dict == {}:
@@ -263,7 +267,7 @@ class TargetManager:
 
             return False
         
-        
+    
     def hit_score_test(self,point,is_near_white)->bool:
         """
         return true : hit target and add score 
@@ -278,23 +282,121 @@ class TargetManager:
             score = target_white_circle.hit_white_target_circle_score_test(camera_point)
             if score > 0 :
                 self.score_player += score
+                #push to server
+                self.hit_score = score 
+                self.hit_x = camera_point[0]
+                self.hit_y = camera_point[1]
+                self.hit_target_id = 1
+
                 return True   
             
             target_white_circle = self.targets[5]
             score = target_white_circle.hit_white_target_circle_score_test(camera_point)
             if score > 0 :
                 self.score_player += score
+                # push to server 
+                self.hit_score = score 
+                self.hit_x = camera_point[0]
+                self.hit_y = camera_point[1]
+                self.hit_target_id = 5
                 return True   
         else :    
-            for target_circle in self.targets.values():
+            for key, target_circle in self.targets.items():
                 score = target_circle.hit_score_test(camera_point)
                 if score > 0 :
                     self.score_player += score
+                     # push to server 
+                    self.hit_score = score 
+                    self.hit_x = camera_point[0]
+                    self.hit_y = camera_point[1]
+                    self.hit_target_id = key
                     return True    
 
         return False
+    
+    def get_push_score_data(self)->Dict:
+        score_data = {
+            "x": self.hit_x,
+            "y": self.hit_y,
+            "score": self.hit_score,
+            "device_id": self.device_id,
+            "target_id": str(self.hit_target_id),
+            }
+        return score_data
+
 
         
+    # 检测目标轮廓
+    def _detect_target(self,frame):
+        """
+         检测 frame 中的椭圆轮廓，并选择面积最大的 6 个椭圆作为目标。
+         """
+        # 转换为灰度图像
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # 高斯模糊降噪
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+        # 边缘检测
+        edges = cv2.Canny(blurred, 50, 150)
+
+        # 查找轮廓
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # 用于存储检测到的轮廓及其面积
+        detected_contours = [contour for contour in contours if self._is_circle(contour) and cv2.contourArea(contour) > 100]
+
+        # 如果有检测到的轮廓，选择面积最大的 TARGET_NUM 个作为结果类
+        result_contours = []
+        if len(detected_contours) > 0:
+        # 将检测到的轮廓按面积从大到小排序
+            sorted_contours = sorted(detected_contours, key=lambda c: cv2.contourArea(c), reverse=True)
+
+          # 选择面积最大的 TARGET_NUM 个轮廓作为结果类
+            if len(detected_contours) > self.num_target:
+                result_contours = sorted_contours[:self.num_target]
+            else:
+                result_contours = sorted_contours[:len(detected_contours)]
+
+        # 返回结果
+        result = {score: [] for score in self.target_scores}
+
+        for i in range(len(result_contours)):
+            score = self.target_scores[i]
+            result[score].append(result_contours[i])
+
+        return result
+    
+
+    # 判断轮廓是否为圆形
+    def _is_circle(self,contour):
+        """
+        根据轮廓点判断轮廓是否为类圆形。
+        """
+        if len(contour) < MIN_POLY:
+            return False
+
+         # 拟合椭圆
+        (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
+
+        # 计算圆度（长轴和短轴的比例）
+        circularity = minor_axis / major_axis if major_axis != 0 else 0
+
+        # 圆度接近1且面积大于一定阈值
+        return circularity > 1.0 - PERI_BIAS and cv2.contourArea(contour) > 100
+
+    # 判断目标结果集合是否符合设定
+    def _is_target_result_valid(self, target_result, num_target):
+        """
+         判断靶标识别结果是否符合 settings 中的设定。
+        """
+        # 统计所有轮廓的总数
+        total_contours = sum(len(contours) for contours in target_result.values())
+
+        # 判断总数是否等于 num_target
+        return total_contours == num_target
+
+    # check target circle position order 
     def _validate_target_result(self,target_data)-> Dict[int,TargetCircle]:
         targets = {}
         for k, v in target_data.items() :
@@ -389,3 +491,10 @@ class TargetManager:
         frame = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
         
         return frame
+    
+    @staticmethod
+    def get_mac_address()->str:
+        # 获取香橙派设备的MAC地址
+        mac = uuid.getnode()
+        mac_address = ':'.join(f'{(mac >> ele) & 0xff:02x}' for ele in range(40, -1, -8))
+        return mac_address

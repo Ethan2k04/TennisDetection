@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from typing import List
 from pprint import pprint
+import time
 from target_manager import TargetManager
 from constants import (
     BALL_HIT_WAIT_SEC, CONFIG_FILE, FPS_COLOR, FPS_SCALE, FPS_THICKNESS,
@@ -70,6 +71,7 @@ while cap.isOpened():
 
    
     if not target_manager.relocate_target(frame, retarget_wait_sec=RETARGET_WAIT_SEC):
+        # time.sleep(1)
         continue
 
 
@@ -112,9 +114,9 @@ while cap.isOpened():
     # cv2.imshow('target roi', binary_roi)
 
 
-    if count == 100:
-        cv2.waitKey(0)
-        continue
+    # if count == 100:
+    #     cv2.waitKey(0)
+    #     continue
 
 
     # Wait indefinitely for a key press to continue to the next frame

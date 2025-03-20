@@ -74,7 +74,7 @@ class TennisBallManager:
         
         # the tennis ball appear in target region time 
         if step_count - self.last_ball_step_count > TennisBallManager.maxStepCount:
-            print("******* clear  tennis ball path *********")
+            # print("******* clear  tennis ball path *********")
             self.tennis_ball_path.clear()
             self.is_hit = False
 
@@ -100,7 +100,7 @@ class TennisBallManager:
         self.tennis_ball_path.append(ball)
 
         # print(ball)
-        print(ball.show_v_dot())
+        # print(ball.show_v_dot())
      
         return True
     
@@ -123,7 +123,7 @@ class TennisBallManager:
             x = last_ball.center_x
             y = last_ball.center_y
             self.is_hit = True
-            print("hit  exceed  maxBallLastStepCount")
+            # print("hit  exceed  maxBallLastStepCount")
             return (x,y, True)
         
         if len(self.tennis_ball_path) < 2:
@@ -135,7 +135,7 @@ class TennisBallManager:
             x = last_ball_2.center_x
             y = last_ball_2.center_y
             self.is_hit = True
-            print("hit white, discontinure frame found ball , fly in white and fly out white")
+            # print("hit white, discontinure frame found ball , fly in white and fly out white")
             return (x,y,True)
         
         # only 3 balls position ->  two velocity -> direction change 
@@ -145,7 +145,7 @@ class TennisBallManager:
                 x = last_ball_2.center_x
                 y = last_ball_2.center_y
                 self.is_hit = True
-                print("hit direction change")
+                # print("hit direction change")
                 return (x,y,False)
             
         return None
