@@ -6,7 +6,8 @@
 
 /.idea/
 /venv/
-
+/data/
+*.avi
 *.mp4
 
 *.txt

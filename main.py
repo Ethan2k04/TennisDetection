@@ -2,10 +2,11 @@ import sys
 import time
 import cv2
 import threading
+import numpy as np
 
 from network import push_data_worker,push_data_async
 from tools import  log_with_timestamp
-from target_manager import TargetManager
+from target_manager import TargetManager,TenisBall
 from tennis_ball_manager import TennisBallManager
 
 from constants import (
@@ -15,15 +16,22 @@ from constants import (
     TITLE_COLOR, TITLE_SCALE, TITLE_THICKNESS,
     TITLE_ORG_RATIO, SCORE_ORG_RATIO, FPS_ORG_RATIO, HINT_1_ORG_RATIO,
     HINT_2_ORG_RATIO, LOG_INVALID_ORG_RATIO, LOG_VALID_ORG_RATIO,
-    DEFAULT_FRAME_WIDTH, 
+    DEFAULT_FRAME_WIDTH, TARGET_COLOR_NO_BALL_INFO ,TARGET_COLOR_HAS_BALL_INFO,
+    TARGET_COLOR_NEED_UPDATE_BALL_INFO 
 )
 
 # -----------------------------------------------------
 # 视频处理类
 class VideoProcessor:
+    MinTargetROISize = 2000
+    MinCurrentTargetROISize = 1000
     def __init__(self, input_source=0, output_path=None):
         self.cap = cv2.VideoCapture(input_source)
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+        #keep consistence with video recorder
+        # but fps is low , site scene is 25
+        # self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('m', 'p', '4', 'v'))
+      
         self.cap.set(cv2.CAP_PROP_FPS, 30)
         self.frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -46,6 +54,8 @@ class VideoProcessor:
 
         self.step_count = 0 #very important, act as time 
 
+        self.ball_info_update = False
+
         if not self.cap.isOpened():
             raise RuntimeError(f"Unable to access input source: {input_source}")
         
@@ -57,7 +67,75 @@ class VideoProcessor:
         else:
             self.video_writer = None
 
+    def _find_ball_in_black_score_10(self,frame:np.ndarray)->bool:
+        # for performance, no need get tennis ball info
+        if not self.ball_manager.is_need_tennis_ball_info_update:
+            return
+        
+        target_roi_black_10 = self.target_manager.target_roi_black_10.get_roi(frame=frame)
+        # 计算 黑10框背景 hue, sat, value
+        self.target_manager.set_target_black_10_bg_hsv(target_roi_black_10)
+        binary_image = self.target_manager.get_ball_like_in_black_score_10(target_roi_black_10)
+        ball,ball_info = self.target_manager.find_ball_in_black_score_10(binary_image, target_roi_black_10,step_count=self.step_count)
+        
+        if ball :
+            # print('ball in black score 10:', ball.show_v_dot())
+            self.ball_manager.add_ball(ball=ball)
+            self.ball_info_update = True
+            # self.ball_manager.set_tennis_ball_info(ball_info=ball_info)
+            self.ball_manager.add_tennis_ball_info(ball_info=ball_info)
+
+            return True
+        else:
+            return False
+        
+    # fix target roi when rolcated , instead by _find_ball_in_current_target_roi
+    def _find_ball_in_target_roi(self,frame:np.ndarray)->bool:
+        #get target ROI , convert binary according tennis ball color
+        target_roi = self.target_manager.target_roi.get_roi(frame=frame)
+        # print(f"*** target_roi : {target_roi.size}   {self.step_count}")
+        # check roi is too small 
+        if target_roi.size < VideoProcessor.MinTargetROISize:
+            return False
+        
+        # in target roi find ball 
+        return self.ball_manager.find_ball(target_roi,self.step_count)
+    
+    def _convert_ball_from_current_target_roi_to_target_roi(self, ball:TenisBall)->TenisBall:
+        c_x , c_y = ball.get_center()
+        center_x, center_y =self.target_manager._convert_current_target_roi_to_target_roi((c_x,c_y))
+        return ball.make_ball((center_x,center_y))
+     
+
+    # depend on last ball found 
+    def _find_ball_in_current_target_roi(self,frame:np.ndarray)->bool:
+        center_p = self.ball_manager.get_center_for_current_target_roi(self.step_count)
+        self.target_manager.setup_current_target_roi(center_point=center_p)
+
+        # for debug
+        # self.target_manager.draw_current_target_roi(frame,TARGET_COLOR_NEED_UPDATE_BALL_INFO)
+       
+        #get current target ROI , convert binary according tennis ball color
+        current_target_roi = self.target_manager.current_target_roi.get_roi(frame=frame)
+        #for debug
+        # print(f"*** target_roi : {current_target_roi.size}   {self.step_count}")
+        # check roi is too small 
+        if current_target_roi.size < VideoProcessor.MinCurrentTargetROISize:
+            print("current target roi is too small ")
+            return False
+        
+        # in target roi find ball 
+        ball = self.ball_manager.find_ball_in_current_target_roi(current_target_roi,self.step_count, self.target_manager)
+        if ball:
+            new_ball = self._convert_ball_from_current_target_roi_to_target_roi(ball=ball)
+            return self.ball_manager.add_ball(ball=new_ball)
+        else:
+            return False
+
+
     def process_stream(self) -> None:
+        found_ball_for_stop = False
+
         while True:
             ret, frame = self.cap.read()
             self.ball_hit_sec, self.retarget_sec = (BALL_HIT_WAIT_SEC, RETARGET_WAIT_SEC)
@@ -67,42 +145,64 @@ class VideoProcessor:
                 break
 
             self.step_count += 1
-            # print('step_count = ', self.step_count)
+            found_ball_for_stop = False
             
             # find canvas target, it is important, if not find target circle , continue
-            if not self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):
-                continue
-            
-            # print("after target relocated")
-            #find ball 
-            #get target ROI , convert binary according tennis ball color
-            target_roi = self.target_manager.target_roi.get_roi(frame=frame)
-    
-            # in target roi find ball 
-            if self.ball_manager.find_ball(target_roi,self.step_count):
-                x,y ,w, h = self.ball_manager.get_last_ball()
-                frame = self.target_manager.draw_ball_in_roi(frame=frame,center_x=x, center_y =y,width= w,height= h)
-    
-            # ball hit canvas test 
-            hit_result = self.ball_manager.hit_test(step_count= self.step_count)
-            if hit_result:
-                x,y, is_near_white = hit_result
-                if self.target_manager.hit_score_test((x,y), is_near_white=is_near_white):
-                    # show score in frame and send to server 
-                    # print(f"********* scores: {target_manager.score_player} ********")
-                    score_data = self.target_manager.get_push_score_data()
-                    push_data_async(score_data)
+            if  self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):    
+                # print("after target relocated")
+   
+                found_ball = False
+                #find ball in black score 10 
+                if not self._find_ball_in_black_score_10(frame=frame):
+                    # not found in black score 10. continue find in whole target roi
+                    # if self._find_ball_in_target_roi(frame=frame):
+                    if self._find_ball_in_current_target_roi(frame=frame):
+                        found_ball = True
+                else:
+                    found_ball = True
+
+                if found_ball:
+                    found_ball_for_stop = True  # for debug
+
+                    x,y ,w, h = self.ball_manager.get_last_ball()
+                    frame = self.target_manager.draw_ball_in_roi(frame=frame,center_x=x, center_y =y,width= w,height= h)
+                
+                #wheter found ball or not, should do hit test
+                # ball hit canvas test 
+                hit_result = self.ball_manager.hit_test(step_count= self.step_count)
+                if hit_result:
+                    # for debug
+                    # print(f"****hit :{ self.ball_manager.hit_step_count}")
+
+                    x,y, is_near_white = hit_result
+                    frame = self.target_manager.draw_hit_in_roi(frame=frame,center_x=x, center_y =y)
+                    if self.target_manager.hit_score_test((x,y), is_near_white=is_near_white):
+                        # show score in frame and send to server 
+                        # print(f"********* scores: {target_manager.score_player} ********")
+                        score_data = self.target_manager.get_push_score_data()
+                        push_data_async(score_data)
 
             frame = self._display_frame(frame)
 
             if self.video_writer:
                 self.video_writer.write(frame)
 
+            # for debug
+            # if found_ball_for_stop:
+            #     print(f'step_count = {self.step_count}  last found ball count = {self.ball_manager.last_ball_step_count}')
+            # else:
+            #     print(f'step_count = {self.step_count}')
+
+            # wait_time = 0 if found_ball_for_stop else 1
+            # key = cv2.waitKey(wait_time)
+            # key = cv2.waitKey(0)
+
             key = cv2.waitKey(1)
             if key & 0xFF == ord('q'):
                 break
             elif key & 0xFF == ord('h'):
                 self.target_manager.force_retarget = True
+                self.ball_manager.is_need_tennis_ball_info_update = True
 
         self._cleanup()
 
@@ -137,13 +237,21 @@ class VideoProcessor:
         else:
             frame_rate = self.last_fps
 
+        # 根据没有网球信息，决定框颜色
+        target_color = TARGET_COLOR_HAS_BALL_INFO
+        if self.ball_info_update:
+            if self.ball_manager.is_need_tennis_ball_info_update:
+                target_color = TARGET_COLOR_NEED_UPDATE_BALL_INFO
+        else:
+            target_color = TARGET_COLOR_NO_BALL_INFO      
 
-        frame = self.target_manager.draw_target_region(frame=frame)
-        frame = self.target_manager.draw_target_circles(frame=frame)
+
+        frame = self.target_manager.draw_target_region(frame=frame,target_color=target_color)
+        frame = self.target_manager.draw_target_circles(frame=frame,target_color=target_color)
 
         # 绘制各种信息
         cv2.putText(
-            frame, "TENNISv1.2", title_org, cv2.FONT_HERSHEY_SIMPLEX,
+            frame, "TENNISv1.9", title_org, cv2.FONT_HERSHEY_SIMPLEX,
             TITLE_SCALE * frame_scale, TITLE_COLOR, int(TITLE_THICKNESS * frame_scale)
         )
         cv2.putText(
@@ -180,6 +288,9 @@ class VideoProcessor:
         return frame
 
     def _cleanup(self) -> None:
+        print("*" * 100)
+        print(f"Score: {self.target_manager.score_player}")
+
         self.cap.release()
         if self.video_writer:
             self.video_writer.release()

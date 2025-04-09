@@ -1,7 +1,7 @@
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-from tennis_ball_util import make_binary_bitmap, find_tenis_ball,TenisBall, make_binary_bitmap_from_frame, tennis_ball_hit_test
+from test_tennis_ball_util import make_binary_bitmap, find_tenis_ball,TenisBall, make_binary_bitmap_from_frame, tennis_ball_hit_test
 from typing import List
 
 # Open the video file

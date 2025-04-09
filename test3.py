@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # 打开视频文件或摄像头
-cap = cv2.VideoCapture('real_sample_1.mp4')
+cap = cv2.VideoCapture('real_sample_4.mp4')
 
 # 读取前三帧
 ret, frame1 = cap.read()

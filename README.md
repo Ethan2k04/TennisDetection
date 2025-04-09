@@ -38,3 +38,47 @@
 - 在碰撞判断中加入了某极值是否是全局前三小的判断，防止某些噪音影响判断
 
 感觉已经接近最终版本了，看甲方那边什么情况
+
+###############################################################3
+#新版1.2 不使用yolo 深度学习网络来识别网球。
+原因:
+1. 网球特征太少，用深度学习没有意义
+2. yolo学习没有使用场景的图片，并做了网球标记,没有针对使用场景进行学习。
+3. 使用深度网络效率低。
+4. 快速运动网球图像是模糊的， 容易与白色背景融合，不能识别出来。
+对使用场景要求：
+1.网球要绿   2.背景布尽量不要使用白色。
+
+#新版1.4 
+1.首先检测目标框
+2.检测目标框黑10目标框，得到黑10的背景颜色信息(hue, saturation. value)
+3.在黑10上做网球检测，通过背景删除，留下的为网球，通过联通性分析，得到可能 网球
+4. 分析网球颜色信息， 为在目标框检测网球提供信息
+5. 在目标框检测网球
+6. 分析网络路径计算撞击点， 
+7. 计算撞击点所在分值
+
+
+项目文件列表:
+README.md
+constants.py
+main.py
+tools.py
+network.py
+target_manager.py
+tennis_ball_manager.py
+tennis_logo.png
+requirements.txt
+meta/config.json
+meta/settings.json
+
+第三方依赖包:
+numpy
+Requests==2.32.3
+opencv-python==4.10.0.84
+
+Press h --> relocateTarget --> find target -> targetroi
+                                          -> black score 10 roi -> need update background
+
+
+        --> need update ball info 

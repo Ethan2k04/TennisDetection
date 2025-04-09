@@ -20,13 +20,38 @@ from constants import (
 from tennis_ball_manager import TennisBallManager
 
 
+def _adjust_brightness(frame):
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l = clahe.apply(l)
+    lab = cv2.merge((l, a, b))
+    frame = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+    return frame
+
+
+
+# plt.ion()  # 开启交互模式
+# fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(16, 8))
+# axs[0].set_xlim([0, 179])
+# axs[0].set_title(" hue Histogram")
+
+# axs[1].set_xlim([0, 255])
+# axs[1].set_title(" saturation Histogram")
+
+# axs[2].set_xlim([0, 255])
+# axs[2].set_title("value Histogram")
+
 target_manager = TargetManager()
 ball_manager = TennisBallManager()
 
 # Open the video file
 
 # cap = cv2.VideoCapture('real_sample_1.mp4')
-cap = cv2.VideoCapture('real_sample_2.mp4')
+# cap = cv2.VideoCapture('real_sample_2.mp4')
+# cap = cv2.VideoCapture('real_sample_3.mp4')
+cap = cv2.VideoCapture('real_sample_7.mp4')
+# cap = cv2.VideoCapture('real_sample_8.mp4')
 
 if not cap.isOpened():
     print("Error: Could not open video.")
@@ -61,13 +86,23 @@ while cap.isOpened():
 
   
     # real_sample_1
+    # if count < 430:
     # if count < 1590:
     # fly over white target 1 
     # if count < 3000:
     # real_sample_2
+    #black score 10
+    # if count < 1590:
     # if count < 800:
     # if count < 420:
         # continue
+        
+    # if count < 220:
+    #     continue
+
+    # real_sample_7 
+    if count < 1994:
+        continue
 
    
     if not target_manager.relocate_target(frame, retarget_wait_sec=RETARGET_WAIT_SEC):
@@ -76,18 +111,60 @@ while cap.isOpened():
 
 
     target_roi = target_manager.target_roi.get_roi(frame=frame)
+    # target_roi = _adjust_brightness(target_roi)
 
-    frame = target_manager.draw_target_region(frame=frame)
-    frame = target_manager.draw_target_circles(frame=frame)
 
-    binary_roi = ball_manager.get_green_from_roi(target_roi)
+    target_roi_black_10 = target_manager.target_roi_black_10.get_roi(frame=frame)
+    target_manager.set_target_black_10_bg_hsv(target_roi_black_10)
+    binary_image = target_manager.get_ball_like_in_black_score_10(target_roi_black_10)
+    ball,ball_info = target_manager.find_ball_in_black_score_10(binary_image, target_roi_black_10,count)
+    if ball :
+        print(ball.show_v_dot())
+        ball_manager.add_ball(ball=ball)
+
+        # ball_manager.set_tennis_ball_info(ball_info=ball_info)
+        ball_manager.add_tennis_ball_info(ball_info=ball_info)
+        
+        x,y ,w, h = ball_manager.get_last_ball()
+        # print(f'x={x} y={y} w={w} h={h}')
+        target_manager.draw_ball_in_roi(frame=frame,center_x=x, center_y =y,width= w,height= h)
+    else:
+        frame = target_manager.draw_target_region(frame=frame)
+        frame = target_manager.draw_target_circles(frame=frame)
+
+        binary_roi = ball_manager.get_green_from_roi(target_roi)
+        cv2.imshow('target roi', binary_roi)
+    # binary_roi = ball_manager.get_green_from_roi_background(target_roi)
+
+
+    # h_roi = target_manager.get_hue_from_roi(target_roi_black_10)
+    # h_hist = target_manager.get_hue_hist_from_roi(target_roi_black_10)
+
+    # s_roi = target_manager.get_s_from_roi(target_roi_black_10)
+    # s_hist = target_manager.get_s_hist_from_roi(target_roi_black_10)
+
+    # v_roi = target_manager.get_v_from_roi(target_roi_black_10)
+    # v_hist = target_manager.get_v_hist_from_roi(target_roi_black_10)
+
+    # axs[0].clear()
+    # axs[0].plot(h_hist)
+
+    # axs[1].clear()
+    # axs[1].plot(s_hist)
+
+    # axs[2].clear()
+    # axs[2].plot(v_hist)
+
+    # plt.tight_layout()
+    # plt.draw()
+    # plt.pause(0.001)  # 短暂暂停以更新画面
 
     # in target roi find ball 
-    if ball_manager.find_ball(target_roi,count):
-        x,y ,w, h = ball_manager.get_last_ball()
-        target_manager.draw_ball_in_roi(frame=frame,center_x=x, center_y =y,width= w,height= h)
+        if ball_manager.find_ball(target_roi,count):
+            x,y ,w, h = ball_manager.get_last_ball()
+            target_manager.draw_ball_in_roi(frame=frame,center_x=x, center_y =y,width= w,height= h)
     
-    # ball hit canvas test 
+    # ball hit canvas test ,网球撞击幕布测试
     hit_result = ball_manager.hit_test(count)
     if hit_result:
         x,y, is_near_white = hit_result
@@ -111,7 +188,13 @@ while cap.isOpened():
     # pprint(target_manager.target_data)
     # 显示结果
     cv2.imshow('Video with Histogram', frame)
+    # cv2.imshow('hue roi', h_roi)
+    # cv2.imshow('s roi', s_roi)
+    # cv2.imshow('v roi', v_roi)
+    # cv2.imshow('binary', binary_image)
+    # cv2.imshow('target roi', target_roi)
     # cv2.imshow('target roi', binary_roi)
+
 
 
     # if count == 100:
@@ -120,7 +203,7 @@ while cap.isOpened():
 
 
     # Wait indefinitely for a key press to continue to the next frame
-    key = cv2.waitKey(1) & 0xFF
+    key = cv2.waitKey(0) & 0xFF
     # print(key)
     if key == ord('q'):
         break
