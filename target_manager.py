@@ -267,10 +267,15 @@ class TargetManager:
         # find left
         left = min(self.targets[1].left,self.targets[3].left) - TARGET_ROI_MARGIN
         # find right
-        right = max(self.targets[2].right,self.targets[6].right) + TARGET_ROI_MARGIN
+        # right = max(self.targets[2].right,self.targets[6].right) + TARGET_ROI_MARGIN
+        # 2025-5-4 , for put roi into frame, camera fixed
+        right = max(self.targets[2].right,self.targets[6].right) 
         # find bottom
-        bottom = max(self.targets[3].bottom,self.targets[4].bottom,self.targets[5].bottom,self.targets[6].bottom) + TARGET_ROI_MARGIN 
-        
+        # bottom = max(self.targets[3].bottom,self.targets[4].bottom,self.targets[5].bottom,self.targets[6].bottom) + TARGET_ROI_MARGIN 
+        # bottom not line, is polyline, camera need calibration, 2025-5-2
+        bottom = max(self.targets[3].bottom,self.targets[4].bottom,self.targets[5].bottom,self.targets[6].bottom) 
+        # bottom = min(self.targets[3].bottom,self.targets[4].bottom,self.targets[5].bottom,self.targets[6].bottom) 
+         
         self.target_roi = TargetROI(left=left,top=top,right=right,bottom=bottom) 
         self.target_roi.setup_scope()
 

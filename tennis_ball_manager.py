@@ -3,6 +3,7 @@ import numpy as np
 import math
 from typing import List,Tuple
 from dataclasses import dataclass
+from hit_manager import HitCanvas
 
 
 #--------------------------------------------
@@ -284,7 +285,7 @@ class TenisBall:
 class TennisBallManager:
     minCount = 6
     maxCount = 400
-    maxStepCount = 30
+    maxStepCount = 60
     maxBallLastStepCount = 5
     minDirectionChanged = 0.7  # velocity dot product 
 
@@ -301,6 +302,17 @@ class TennisBallManager:
         # 统计检测到球的次数
         self.count_ball_detect = 0
         self.count_ball_detect_in_black_score_10 = 0
+    
+    def _should_reset_ball_path(self,step_count):
+        if step_count - self.last_ball_step_count > TennisBallManager.maxStepCount:
+            # print("******* clear  tennis ball path *********")
+            self.tennis_ball_path.clear()
+
+    def  _should_reset_hit(self, step_count):
+        if step_count - self.hit_step_count > TennisBallManager.maxStepCount:
+            self.is_hit = False
+            self.hit_step_count = step_count
+
 
     # 设置网球信息，从黑10目标检测出来
     def set_tennis_ball_info(self, ball_info: TenisBallInfo):
@@ -391,6 +403,10 @@ class TennisBallManager:
     #deprecated, not used 
     def find_ball(self, roi:np.ndarray, step_count:int)->bool:
 
+      
+        self._should_reset_hit(step_count=step_count)
+
+
         green_binary = self.get_green_from_roi(roi)
         count = np.count_nonzero(green_binary)
         # print(f'ball area count:{count}')
@@ -399,13 +415,6 @@ class TennisBallManager:
         if count < TennisBallManager.minCount :
             return False
         
-        # the tennis ball appear in target region time 
-        # 网球间隔 2.5秒 ，超过maxStepcount 认为是新球
-        if step_count - self.last_ball_step_count > TennisBallManager.maxStepCount:
-            # print("******* clear  tennis ball path *********")
-            self.tennis_ball_path.clear()
-            self.is_hit = False
-
         # found ball 
         # print(f" find ball : {count}")
         best_left ,best_top = 0, 0
@@ -447,6 +456,10 @@ class TennisBallManager:
         if best_score == 0 : #没有识别到球
             return False
         
+        # the tennis ball appear in target region time 
+        # 网球间隔 2.5秒 ，超过maxStepcount 认为是新球
+        self._should_reset_ball_path(step_count=step_count)
+
         # 识别到球
         x = int(best_centroid_x)
         y = int(best_centroid_y)
@@ -471,6 +484,8 @@ class TennisBallManager:
         return True
     
     def find_ball_in_current_target_roi(self, current_target_roi:np.ndarray,  step_count:int, target_manager)->TenisBall|None:
+
+        self._should_reset_hit(step_count=step_count)
 
         green_binary = self.get_green_from_roi(current_target_roi)
 
@@ -499,8 +514,8 @@ class TennisBallManager:
         # if num_labels > 4 :
         if num_labels > 6 :
             # self.tennis_ball_info = TenisBallInfo()
-            print("too many ball like object ")
-            return None
+            print(f"too many ball like object : {num_labels}")
+            # return None
         #forground has more than 2 blob, only in target circle is valid, discard out of target ball like cluster
 
         for i in range(1, num_labels):
@@ -536,10 +551,7 @@ class TennisBallManager:
         
         # the tennis ball appear in target region time 
         # 网球间隔 2.5秒 ，超过maxStepcount 认为是新球
-        if step_count - self.last_ball_step_count > TennisBallManager.maxStepCount:
-            # print("******* clear  tennis ball path *********")
-            self.tennis_ball_path.clear()
-            self.is_hit = False
+        self._should_reset_ball_path(step_count=step_count)
         
         # 识别到球
         x = int(best_centroid_x)
@@ -581,12 +593,20 @@ class TennisBallManager:
         return (ball.center_x, ball.center_y, ball.width, ball.height)
     
     #hit convas test
-    def hit_test(self, step_count)->Tuple[int,int,bool] | None:
+    def hit_test(self, step_count, is_hit_canvas:HitCanvas)->Tuple[int,int,bool] | None:
         if self.is_hit:
+            # print(f"is_hit: step_count:{step_count}  is_hit_canvas:{is_hit_canvas}")
             return None
         
         if len(self.tennis_ball_path) == 0 :
+            # print(f"no ball : is_hit:{self.is_hit}, step_count:{step_count}  is_hit_canvas:{is_hit_canvas}")
+            if is_hit_canvas == HitCanvas.HitCanvas:
+                self.is_hit = True
+                self.hit_step_count = step_count
+
             return None
+        
+        # print(f" ball : {len(self.tennis_ball_path)} is_hit:{self.is_hit}, step_count:{step_count}  is_hit_canvas:{is_hit_canvas}")
         
         # exceed  maxBallLastStepCount frame no ball found, return last ball as hit 
         # if (step_count - self.last_ball_step_count) > TennisBallManager.maxBallLastStepCount:
@@ -596,7 +616,28 @@ class TennisBallManager:
         #     self.is_hit = True
         #     # print("hit  exceed  maxBallLastStepCount")
         #     return (x,y, True)
+
+        # detect hit canvas by hit manager throught background substract
+        # I am sure : ball is hit canvas, because threshold is set too hight,
+        # slow mode
+        if is_hit_canvas == HitCanvas.HitCanvas:
+            last_ball = self.tennis_ball_path[-1]
+            x = last_ball.center_x
+            y = last_ball.center_y
+            self.is_hit = True
+            self.tennis_ball_path.clear()
+            # self.hit_step_count = last_ball.step_count
+            self.hit_step_count = last_ball.step_count
+            # print(f"hit_canvas : x={x } y={y} input step_count:{step_count}  hit_step_count :{self.hit_step_count}")
+            return (x,y, True)
         
+        if is_hit_canvas == HitCanvas.NotHitCanvas:
+            # print("not hit canvas ")
+            return None
+        
+        # print(f"not sure hit canvas balls:{len(self.tennis_ball_path)}")
+
+        # I am not sure, ball hit canvas, need another way to detect
          # exceed  maxBallLastStepCount frame no ball found, return middle ball as hit 
         if (step_count - self.last_ball_step_count) > TennisBallManager.maxBallLastStepCount:
             # mid_index = len(self.tennis_ball_path) // 2

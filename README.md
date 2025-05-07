@@ -71,6 +71,9 @@ tennis_logo.png
 requirements.txt
 meta/config.json
 meta/settings.json
+hit_manager.py
+
+11
 
 第三方依赖包:
 numpy
@@ -82,3 +85,11 @@ Press h --> relocateTarget --> find target -> targetroi
 
 
         --> need update ball info 
+
+version 2.0 
+hit_manager.py : use background substraction detect ball hit canvas
+roi -> resize -> count non zero :  not hit, not sure, hit happen, outlier
+
+frame rate > 100, detect many ball like object , noise,
+make a reasonable frame rate is important, now frame rate at 40
+

@@ -9,6 +9,8 @@ from tools import  log_with_timestamp
 from target_manager import TargetManager,TenisBall
 from tennis_ball_manager import TennisBallManager
 
+from hit_manager import HitManager
+
 from constants import (
     BALL_HIT_WAIT_SEC,  FPS_COLOR, FPS_SCALE, FPS_THICKNESS,
     HINT_COLOR, HINT_SCALE, HINT_THICKNESS, LOG_INVALID_COLOR, LOG_SCALE,
@@ -25,6 +27,9 @@ from constants import (
 class VideoProcessor:
     MinTargetROISize = 2000
     MinCurrentTargetROISize = 1000
+    #shrink roi bottom margin, and right margin, for test site
+    Version = "TENNIS 2.1"
+
     def __init__(self, input_source=0, output_path=None):
         self.cap = cv2.VideoCapture(input_source)
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
@@ -40,6 +45,7 @@ class VideoProcessor:
 
         self.target_manager = TargetManager()
         self.ball_manager = TennisBallManager()
+        self.hit_manager = HitManager()
       
         self.last_frame_time = time.time()
         self.ball_timestamps = {}
@@ -48,9 +54,11 @@ class VideoProcessor:
         self.ball_hit_sec = BALL_HIT_WAIT_SEC
         self.retarget_sec = RETARGET_WAIT_SEC
      
+        #caculate stable frame rate, smooth frame rate
         self.frame_counter = 0
         self.last_fps = 0
         self.last_fps_calc_time = time.time()
+        self.frame_rate = 30
 
         self.step_count = 0 #very important, act as time 
 
@@ -132,9 +140,17 @@ class VideoProcessor:
         else:
             return False
 
-
+    # main process loop
     def process_stream(self) -> None:
-        found_ball_for_stop = False
+        found_ball_for_stop = False # this for debug
+
+        # need a stable frame rate, if too high for example 100 above, induce noise
+        # 目标帧率（每秒帧数）
+        # target_fps = 60
+        target_fps = 40
+        # 每一帧的时间间隔（秒）
+        frame_time = 1 / target_fps
+
 
         while True:
             ret, frame = self.cap.read()
@@ -146,6 +162,7 @@ class VideoProcessor:
 
             self.step_count += 1
             found_ball_for_stop = False
+            start_time = time.time()  # for frame rate control
             
             # find canvas target, it is important, if not find target circle , continue
             if  self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):    
@@ -169,7 +186,11 @@ class VideoProcessor:
                 
                 #wheter found ball or not, should do hit test
                 # ball hit canvas test 
-                hit_result = self.ball_manager.hit_test(step_count= self.step_count)
+                # must do every frame when target roi is found
+                target_roi = self.target_manager.target_roi.get_roi(frame=frame)
+                is_hit_canvas = self.hit_manager.test_hit(target_roi=target_roi)
+
+                hit_result = self.ball_manager.hit_test(step_count= self.step_count, is_hit_canvas=is_hit_canvas)
                 if hit_result:
                     # for debug
                     # print(f"****hit :{ self.ball_manager.hit_step_count}")
@@ -203,6 +224,25 @@ class VideoProcessor:
             elif key & 0xFF == ord('h'):
                 self.target_manager.force_retarget = True
                 self.ball_manager.is_need_tennis_ball_info_update = True
+            
+
+            # 计算本次循环已经花费的时间
+            elapsed_time = time.time() - start_time
+            # 如果本次循环花费的时间小于每一帧的时间间隔，就进行休眠
+            if elapsed_time < frame_time:
+                time.sleep(frame_time - elapsed_time)
+
+            # 统计1秒内的帧数
+            current_time = time.time()
+            self.frame_counter += 1
+        
+            # 如果距离上一次计算FPS的时间超过1秒，则计算FPS并重置计数器
+            if current_time - self.last_fps_calc_time >= 1.0:
+                self.last_fps = self.frame_counter
+                self.frame_counter = 0
+                self.last_fps_calc_time = current_time
+            else:
+                self.frame_rate = self.last_fps
 
         self._cleanup()
 
@@ -223,19 +263,7 @@ class VideoProcessor:
         hint_2_org = (int(frame_width * HINT_2_ORG_RATIO[0]), int(frame_height * HINT_2_ORG_RATIO[1]))
         log_valid_org = (int(frame_width * LOG_VALID_ORG_RATIO[0]), int(frame_height * LOG_VALID_ORG_RATIO[1]))
         log_invalid_org = (int(frame_width * LOG_INVALID_ORG_RATIO[0]), int(frame_height * LOG_INVALID_ORG_RATIO[1]))
-        
-        # 统计1秒内的帧数
-        current_time = time.time()
-        self.frame_counter += 1
-        
-        # 如果距离上一次计算FPS的时间超过1秒，则计算FPS并重置计数器
-        frame_rate = self.frame_counter
-        if current_time - self.last_fps_calc_time >= 1.0:
-            self.last_fps = self.frame_counter
-            self.frame_counter = 0
-            self.last_fps_calc_time = current_time
-        else:
-            frame_rate = self.last_fps
+      
 
         # 根据没有网球信息，决定框颜色
         target_color = TARGET_COLOR_HAS_BALL_INFO
@@ -251,7 +279,7 @@ class VideoProcessor:
 
         # 绘制各种信息
         cv2.putText(
-            frame, "TENNISv1.9", title_org, cv2.FONT_HERSHEY_SIMPLEX,
+            frame, VideoProcessor.Version, title_org, cv2.FONT_HERSHEY_SIMPLEX,
             TITLE_SCALE * frame_scale, TITLE_COLOR, int(TITLE_THICKNESS * frame_scale)
         )
         cv2.putText(
@@ -259,7 +287,7 @@ class VideoProcessor:
             SCORE_SCALE * frame_scale, SCORE_COLOR, int(SCORE_THICKNESS * frame_scale)
         )
         cv2.putText(
-            frame, f"FPS: {frame_rate}", fps_org, cv2.FONT_HERSHEY_SIMPLEX,
+            frame, f"FPS: {self.frame_rate}", fps_org, cv2.FONT_HERSHEY_SIMPLEX,
             FPS_SCALE * frame_scale, FPS_COLOR, int(FPS_THICKNESS * frame_scale)
         )
         cv2.putText(
