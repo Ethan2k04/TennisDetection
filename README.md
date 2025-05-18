@@ -93,3 +93,7 @@ roi -> resize -> count non zero :  not hit, not sure, hit happen, outlier
 frame rate > 100, detect many ball like object , noise,
 make a reasonable frame rate is important, now frame rate at 40
 
+version 2.3
+when hit target is detect, do not detect ball for 1.5 seconds, because light up
+this will effect  background subtraction statistics, so ignore it for 1.5 seconds
+

@@ -10,9 +10,9 @@ class HitCanvas(Enum):
 
 
 class HitManager():
-    Max_Fgbg_Count = 100
-    Min_Fgbg_Count = 10
-    Max_Fgbg_Len = 100
+    Max_Fgbg_Count = 100 #init threshold for  hit canvas
+    Min_Fgbg_Count = 10 # init threshold for not hit canvas
+    Max_Fgbg_Len = 200  # collect change for dynamic adjust Max_Fgbg_count, Min_Fgbg_count
 
     def __init__(self):
         # 创建背景减除器对象
@@ -24,11 +24,15 @@ class HitManager():
         #dynamic threshold
         self.fgbg_mask_list = []
         self.count = 0 
-        # self.mean = 0
-        # self.std = 0 
+        self.mean = 0
+        self.std = 0 
         self.max_fgbg_count = HitManager.Max_Fgbg_Count
         self.min_fgbg_count = HitManager.Min_Fgbg_Count
         self.outlier_count = HitManager.Max_Fgbg_Count * 2
+
+        self.last_count = 0
+
+        self.output_str = ""
 
     # deprecated
     def apply(self, target_roi, frame_step):
@@ -50,39 +54,65 @@ class HitManager():
         if self.count < HitManager.Max_Fgbg_Len:
             return
         
+        # for debug
+        self.output_str = ", ".join(map(str,self.fgbg_mask_list))
+
         arr = np.array(self.fgbg_mask_list)
         _mean = arr.mean()
         _std = arr.std()
+
+        self.mean = _mean
+        self.std = _std
+
         self.count = 0 
         self.fgbg_mask_list.clear()
         # print(f"mean:{_mean} std:{_std}")
 
         if _std > 10 :
             self.max_fgbg_count = _mean + 2 * _std
-            self.outlier_count = _mean + 4 * _std
+            self.outlier_count = _mean + 6 * _std
             self.min_fgbg_count = max  ( HitManager.Min_Fgbg_Count, _mean  )
 
-
+    def __repr__(self):
+        return f"""
+        hit manager: mean:{self.mean}  std:{self.std}
+        min : {self.min_fgbg_count}  max : { self.max_fgbg_count}  outlier: {self.outlier_count}
+        {self.output_str}
+        """
 
     def test_hit(self, target_roi)->HitCanvas:
         resized_image = cv2.resize(target_roi, None, fx=0.2, fy=0.2, interpolation=cv2.INTER_AREA)
         # 应用背景减除器
         fgmask = self.fgbg.apply(resized_image)
         sum = np.count_nonzero(fgmask)
+
         # print(f"fgbg count:{sum}")
         if 1 < sum < self.outlier_count :  # less 1 cansider noise ,outlier not include
             self.fgbg_mask_list.append(sum)
             self.count += 1
             self._should_update_threshold()
 
+
         if sum > self.outlier_count:
             return HitCanvas.NotHitCanvas
-        elif  sum > self.max_fgbg_count:
+        
+        #absolute jude
+        if  sum > self.max_fgbg_count:
             return HitCanvas.HitCanvas
-        elif sum < self.min_fgbg_count:
+        
+        if sum < self.min_fgbg_count:
             return HitCanvas.NotHitCanvas
-        else:
-            return HitCanvas.NotSureHitCanvas
+        
+
+        #jump mean hit : relative
+        diff = sum - self.last_count
+        self.last_count = sum 
+        if self.std > 0 and diff > self.std * 2:
+            print(f"diff:{diff}  current:{sum}")
+            return HitCanvas.HitCanvas
+        
+      
+        return HitCanvas.NotSureHitCanvas
             
 
         

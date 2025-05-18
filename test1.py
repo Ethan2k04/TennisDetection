@@ -15,6 +15,8 @@ ax.set_title('Hue Histogram')
 
 # Open the video file
 
+frame_rate = 1 / 60 
+print(frame_rate)
 cap = cv2.VideoCapture('real_sample_1.mp4')
 # cap = cv2.VideoCapture('real_sample_2.mp4')
 

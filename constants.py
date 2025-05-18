@@ -98,7 +98,10 @@ LOG_INVALID_COLOR = (0, 200, 200)
 MIN_POLY = 5
 
 # 非椭圆容忍度
-PERI_BIAS = 0.2
+# 2025-5-10, camera is oblique, so camera see the circle is not good circle
+PERI_BIAS = 0.3
+#if camera is in middle of canvas, will use this setting
+# PERI_BIAS = 0.2
 
 # 网球置信度
 BALL_CONF = 0.2

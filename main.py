@@ -28,7 +28,7 @@ class VideoProcessor:
     MinTargetROISize = 2000
     MinCurrentTargetROISize = 1000
     #shrink roi bottom margin, and right margin, for test site
-    Version = "TENNIS 2.1"
+    Version = "TENNIS 2.4"
 
     def __init__(self, input_source=0, output_path=None):
         self.cap = cv2.VideoCapture(input_source)
@@ -61,6 +61,10 @@ class VideoProcessor:
         self.frame_rate = 30
 
         self.step_count = 0 #very important, act as time 
+
+        #if hit target, light up indicate which target hit, so prevent process for 1 s
+        # whent hit target , set the vale = time() , unit seconds
+        self.ball_hit_canvas_time = 0 
 
         self.ball_info_update = False
 
@@ -98,6 +102,7 @@ class VideoProcessor:
             return False
         
     # fix target roi when rolcated , instead by _find_ball_in_current_target_roi
+    #deprecated
     def _find_ball_in_target_roi(self,frame:np.ndarray)->bool:
         #get target ROI , convert binary according tennis ball color
         target_roi = self.target_manager.target_roi.get_roi(frame=frame)
@@ -128,7 +133,7 @@ class VideoProcessor:
         #for debug
         # print(f"*** target_roi : {current_target_roi.size}   {self.step_count}")
         # check roi is too small 
-        if current_target_roi.size < VideoProcessor.MinCurrentTargetROISize:
+        if current_target_roi.size < self.MinCurrentTargetROISize:
             print("current target roi is too small ")
             return False
         
@@ -136,9 +141,19 @@ class VideoProcessor:
         ball = self.ball_manager.find_ball_in_current_target_roi(current_target_roi,self.step_count, self.target_manager)
         if ball:
             new_ball = self._convert_ball_from_current_target_roi_to_target_roi(ball=ball)
+            self.ball_info_update = True
             return self.ball_manager.add_ball(ball=new_ball)
         else:
             return False
+        
+    def _is_valide_time_scope(self)->bool:
+        #ignore detect for 1.5s
+        return (time.time() - self.ball_hit_canvas_time) > 1.5 
+    
+    #for debug
+    def show_info(self):
+        print(self.hit_manager)
+        print(self.ball_manager.tennis_ball_info_manager.output_str)
 
     # main process loop
     def process_stream(self) -> None:
@@ -146,8 +161,9 @@ class VideoProcessor:
 
         # need a stable frame rate, if too high for example 100 above, induce noise
         # 目标帧率（每秒帧数）
-        # target_fps = 60
-        target_fps = 40
+        # target_fps = 80
+        target_fps = 60
+        # target_fps = 40
         # 每一帧的时间间隔（秒）
         frame_time = 1 / target_fps
 
@@ -165,7 +181,7 @@ class VideoProcessor:
             start_time = time.time()  # for frame rate control
             
             # find canvas target, it is important, if not find target circle , continue
-            if  self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):    
+            if self._is_valide_time_scope() and  self.target_manager.relocate_target(frame, retarget_wait_sec=self.retarget_sec):    
                 # print("after target relocated")
    
                 found_ball = False
@@ -203,6 +219,13 @@ class VideoProcessor:
                         score_data = self.target_manager.get_push_score_data()
                         push_data_async(score_data)
 
+                        #for support light up the target
+                        self.ball_hit_canvas_time = time.time()
+
+            #for debug
+            # if not self._is_valide_time_scope():
+            #     print("hit canvas  do not do anything")
+
             frame = self._display_frame(frame)
 
             if self.video_writer:
@@ -224,6 +247,8 @@ class VideoProcessor:
             elif key & 0xFF == ord('h'):
                 self.target_manager.force_retarget = True
                 self.ball_manager.is_need_tennis_ball_info_update = True
+            elif key & 0xFF == ord('i'):
+                self.show_info()
             
 
             # 计算本次循环已经花费的时间
@@ -275,7 +300,7 @@ class VideoProcessor:
 
 
         frame = self.target_manager.draw_target_region(frame=frame,target_color=target_color)
-        frame = self.target_manager.draw_target_circles(frame=frame,target_color=target_color)
+        frame = self.target_manager.draw_target_circles(frame=frame,target_color=target_color,is_hit=self.ball_manager.is_hit)
 
         # 绘制各种信息
         cv2.putText(
@@ -283,7 +308,7 @@ class VideoProcessor:
             TITLE_SCALE * frame_scale, TITLE_COLOR, int(TITLE_THICKNESS * frame_scale)
         )
         cv2.putText(
-            frame, f"Score: {self.target_manager.score_player}", score_org, cv2.FONT_HERSHEY_SIMPLEX,
+            frame, f"Score: {self.target_manager.score_player} Hit:{self.target_manager.hit_target_id}", score_org, cv2.FONT_HERSHEY_SIMPLEX,
             SCORE_SCALE * frame_scale, SCORE_COLOR, int(SCORE_THICKNESS * frame_scale)
         )
         cv2.putText(

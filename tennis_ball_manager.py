@@ -115,6 +115,9 @@ class TennisBallInfoManager:
         self.ball_info_list : List[TenisBallInfo] = []
         self.max_count = 10
 
+        #for debug
+        self.output_str = ""
+
     def show_info(self):
         print(f'h mean:{self.hue_mean}, hu median:{self.hue_median} h std:{self.hue_std}')
         print(f'sat mean:{self.sat_mean}, sat median:{self.sat_median} sat std:{self.sat_std}')
@@ -197,6 +200,7 @@ class TennisBallInfoManager:
      
 
     def get_hsv_scope(self)-> Tuple[List[int],List[int]]:
+        #   low: [43, 50, 148]   hight:[80, 154, 255]
         if len(self.ball_info_list) == 0 :
             low_list = [30, 100, 100]
             high_list = [80, 255, 255]
@@ -209,6 +213,10 @@ class TennisBallInfoManager:
             
         # for debug
         # print(f'*** low:{low_list} high:{high_list}')
+        self.output_str = f"""
+            hsv :
+            low: {low_list}   hight:{high_list}
+        """
 
         return low_list,high_list
     
@@ -315,6 +323,7 @@ class TennisBallManager:
 
 
     # 设置网球信息，从黑10目标检测出来
+    #deprecated, move to add_tennis_ball_info
     def set_tennis_ball_info(self, ball_info: TenisBallInfo):
         self.count_ball_detect_in_black_score_10 += 1
         print(f"count roi :{self.count_ball_detect}  count roi black score: {self.count_ball_detect_in_black_score_10} ")
@@ -565,7 +574,8 @@ class TennisBallManager:
         self.count_ball_detect += 1
         mask = labels == best_label
         ball_info = self._compute_ball_info(origin_image=current_target_roi,mask=mask)
-        self.tennis_ball_info_manager.add_ball_info(ball_info=ball_info)
+        self.add_tennis_ball_info(ball_info=ball_info)
+        # self.tennis_ball_info_manager.add_ball_info(ball_info=ball_info)
         # for debug
         # ball_info.show_info() 
         
@@ -596,6 +606,9 @@ class TennisBallManager:
     def hit_test(self, step_count, is_hit_canvas:HitCanvas)->Tuple[int,int,bool] | None:
         if self.is_hit:
             # print(f"is_hit: step_count:{step_count}  is_hit_canvas:{is_hit_canvas}")
+            #when hit canvas detect , do not keep ball , prevent effect next error detect
+            #whe hit , should ignore the ball, prevent fall ball pass through target, error detect
+            self.tennis_ball_path.clear()
             return None
         
         if len(self.tennis_ball_path) == 0 :
@@ -624,19 +637,27 @@ class TennisBallManager:
             last_ball = self.tennis_ball_path[-1]
             x = last_ball.center_x
             y = last_ball.center_y
+            last_ball_step_count = last_ball.step_count
             self.is_hit = True
             self.tennis_ball_path.clear()
-            # self.hit_step_count = last_ball.step_count
-            self.hit_step_count = last_ball.step_count
-            # print(f"hit_canvas : x={x } y={y} input step_count:{step_count}  hit_step_count :{self.hit_step_count}")
-            return (x,y, True)
+            
+            #if (step_count - last_ball_step_count) < 3:
+            #real ball fly is fast
+            if (step_count - last_ball_step_count) < 2:
+                # self.hit_step_count = last_ball.step_count
+                self.hit_step_count = last_ball.step_count
+                # print(f"hit_canvas : x={x } y={y} input step_count:{step_count}  hit_step_count :{self.hit_step_count}")
+                return (x,y, True)
+            else: # hit but can not decide ball location
+                return None
         
         if is_hit_canvas == HitCanvas.NotHitCanvas:
             # print("not hit canvas ")
             return None
         
         # print(f"not sure hit canvas balls:{len(self.tennis_ball_path)}")
-
+        return None
+    
         # I am not sure, ball hit canvas, need another way to detect
          # exceed  maxBallLastStepCount frame no ball found, return middle ball as hit 
         if (step_count - self.last_ball_step_count) > TennisBallManager.maxBallLastStepCount:

@@ -124,11 +124,6 @@ class TargetROI:
         # remove background , hue histogram , peak,  bin 90
         # left is ball or no ball 
     
-
-
-
-    
-    
 # ------------------------------------------------------
 
 # 目标圆
@@ -192,7 +187,7 @@ class TargetCircle:
         x, y = point
         # print(f'x:{x} y:{y} left: {self.left}  top: {self.top} right:{self.right} bottom:{self.bottom}')
         return   self.left_ <= x <= self.right_ and  self.top_ <= y <= self.bottom_
-             
+       
     def _is_in_circle(self, point:Tuple[int,int])->bool :
         p_x,p_y = point
         return ((p_x - self.x) ** 2 + (p_y - self.y) ** 2) <= (self.height / 2) ** 2
@@ -257,7 +252,7 @@ class TargetManager:
         self.hit_y : int = 0
         self.hit_score:int = 0
         self.device_id = urllib.parse.quote(TargetManager.get_mac_address())
-        self.hit_target_id = 1
+        self.hit_target_id = 0
 
 
     # according 1,2,3,4,5,6 target circle , caulate target_roi, target_black_score_10 roi 
@@ -302,7 +297,7 @@ class TargetManager:
         return frame
     
     # 根据检测结果绘制标靶目标框
-    def draw_target_circles(self,frame,target_color):
+    def draw_target_circles(self,frame,target_color, is_hit):
         """
         根据检出的标靶轮廓绘制目标框和椭圆。
         """
@@ -316,8 +311,13 @@ class TargetManager:
             label =  str(key)  # 标签
             text_position = (x + int(minor_axis / 2) - TEXT_MARGIN, y - int(major_axis / 2) + TEXT_MARGIN)
 
+            if key == self.hit_target_id and is_hit :
+                _target_color = (0,0,255)
+            else:
+                _target_color = target_color
+
             # 绘制椭圆
-            cv2.ellipse(frame, (x, y), (minor_axis // 2, major_axis // 2), 0, 0, 360, target_color, LINE_THICKNESS)
+            cv2.ellipse(frame, (x, y), (minor_axis // 2, major_axis // 2), 0, 0, 360, _target_color, LINE_THICKNESS)
 
              # 在框旁边显示标签
             cv2.putText(
@@ -379,7 +379,14 @@ class TargetManager:
         
         # if time.time() - self.last_relocate_time < retarget_wait_sec:
         #     return False # 需要设置，离上次设置时间太短
-               
+        #future to do
+        # if detect fail, will shrink top gradully to enhance detect
+        # that is remove white grid disturb to find circle contour
+        #           white grid
+        #   wall  canvas   vall
+        #   gutter to collect ball  
+        #  this real scene configuration
+
 	    # 亮度修正
         frame = self._adjust_brightness(frame)
         target_result = self._detect_target(frame)
@@ -460,7 +467,11 @@ class TargetManager:
                 self.hit_y = camera_point[1]
                 self.hit_target_id = key
                 return True    
-            
+        
+        return False
+    
+        #2025-5-18, after see real site test, following code is error code
+        #think too much , if not hit target, do not  test white target
         #fly over white , loss ball
         if not is_near_white:
             return False
@@ -840,14 +851,19 @@ class TargetManager:
         """
         根据轮廓点判断轮廓是否为类圆形。
         """
-        if len(contour) < MIN_POLY:
+        if len(contour) < MIN_POLY: # 椭圆拟合至少需要5个点
             return False
 
          # 拟合椭圆
         (x, y), (major_axis, minor_axis), angle = cv2.fitEllipse(contour)
 
         # 计算圆度（长轴和短轴的比例）
-        circularity = minor_axis / major_axis if major_axis != 0 else 0
+        _minor_axis = min(minor_axis,major_axis)
+        _major_axis = max(minor_axis,major_axis)
+        circularity = _minor_axis / _major_axis if _major_axis != 0 else 0 
+
+        # circularity = minor_axis / major_axis if major_axis != 0 else 0
+        # print(f"circularity:{circularity} angle:{angle}")
 
         # 圆度接近1且面积大于一定阈值
         return circularity > 1.0 - PERI_BIAS and cv2.contourArea(contour) > 100
@@ -883,9 +899,15 @@ class TargetManager:
             3  4  5  6
         """
         # check target 1
+        # because target 1 is white circle,  around grid is white, so too many disturb contour
         if targets[1].right > targets[2].left:
             return {}
         
+        #detect outside grid as target circle 1
+        # x is row, center_x is vertical
+        if targets[1].center_x > targets[2].top :
+            return {} 
+
         top_3456 = min(targets[3].top,targets[4].top,targets[5].top,targets[6].top)
 
         if targets[1].bottom > top_3456:
