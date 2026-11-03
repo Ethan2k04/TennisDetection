@@ -1,99 +1,93 @@
-# 基于yolo11的网球落点检测项目（部署于香橙派5max）
+# Real-Time Tennis Ball Impact Detection and Scoring System
 
 ![tennis_logo](https://github.com/user-attachments/assets/1f677a89-d2d2-4111-8825-0d71ab92f9a4)
 
-> 请勿 fork 或者 clone 本仓库，仅个人使用
+A real-time computer vision system that detects tennis balls hitting a scoring target, locates the impact point, and computes the score. It runs on an embedded edge device, the **Orange Pi 5 Max (Rockchip RK3588)**, with a single camera, and was developed for a commercial tennis training product.
 
-## Update 1.13
-甲方验货前已完成板端rknn的部署，但是运行帧率略低，下面的优化有待实现：
+## Highlights
 
-- 训练.pt模型时，将激活函数改为ReLU✅
-- 板端推理时使用线程池提高NPU利用率❓
+- **Embedded real-time deployment**: runs entirely on an ARM single-board computer. Phase 1 reached **60 FPS** with on-device NPU inference.
+- **Two detection approaches, compared on real deployment data**:
+  - **Phase 1**: YOLO11 detector converted to RKNN for the RK3588 NPU.
+  - **Phase 2**: a lightweight classical vision pipeline (background subtraction and connected-component analysis). It replaced the detector because it handles fast, motion-blurred balls more robustly in this setting.
+- **End-to-end pipeline**: target localization, ball detection, impact detection, impact-point estimation, and scoring.
 
-目前有三点问题：
+## System Pipeline (current version)
 
-- 帧率未达到60帧
-- 识别靶标的参数没调好（能不能自动调）
-- 识别撞击不精确
+1. **Target localization**: detect the target board using shape-based detection.
+2. **Background modeling**: locate the black 10-point zone and sample its background color statistics (hue, saturation, value).
+3. **Ball candidate detection**: within the 10-point zone, remove the background and run connected-component analysis to extract ball candidates.
+4. **Ball appearance modeling**: estimate the ball's color statistics from the candidates. These statistics are used to detect the ball over the whole target.
+5. **Full-target ball detection**: detect the ball over the whole target board.
+6. **Impact detection** (`hit_manager.py`): apply background subtraction to the target ROI, resize the result, and count non-zero pixels. Each frame is classified as *no hit*, *uncertain*, *hit*, or *outlier*.
+7. **Impact point and scoring**: estimate the impact point from the ball trajectory and map it to the corresponding scoring zone.
 
-## Update 1.22
+## Development History
 
-针对之前的三点问题，作了如下优化：
+### Phase 1: Deep-learning detector on the edge NPU (v1.13 – v1.30)
 
-- 使用 2 个进程解耦了摄像头进程和 Yolo 检测进程，目前实时帧率可以达到 60 帧
-- 简化了靶标识别逻辑，取消了颜色筛选，使用形状检测，解决了之前光照会影响检测的问题
-- 使用网球检测框大小变化作为碰撞判据，当网球检测框大小处于全局最小值时判定为碰撞
-- Yolo 进程内使用多线程并发获取 frame 并检测，同时使用 reorder_buffer 确保检测结果按顺序提交
+- Trained a **YOLO11** tennis ball detector and deployed it on the RK3588 NPU via **RKNN**.
+- Replaced the activation functions with **ReLU** during training for better NPU compatibility and speed.
+- **Decoupled camera capture and detection into separate processes**, raising real-time throughput to **60 FPS**.
+- Fetched and detected frames concurrently with multiple workers, using a **reorder buffer** so results are emitted in frame order. Multi-process detection was later found to reduce bounding-box tracking latency compared with multi-threading.
+- Simplified target detection from color filtering to **shape detection**, which removed sensitivity to lighting changes.
+- Designed an impact criterion based on the **change in ball bounding-box size**: an impact is registered when the box size reaches a global minimum. A check that the minimum ranks among the three smallest values filters out noise.
 
-目前存在的问题：
+### Phase 2: Lightweight classical vision pipeline (v1.2 – v2.3)
 
-- 网球检测框显示在画面上存在延迟（因为使用了多进程）
-- 碰撞识别还可以优化，提高准确率
+Analysis of the deployed system showed that a deep detector was not the best fit for this task:
 
-## Update 1.30
+1. A tennis ball has very few distinctive visual features, so a deep network offers limited benefit.
+2. The detector was not trained on images from the actual deployment scene.
+3. Deep-network inference is less efficient on the edge device.
+4. Fast-moving balls are heavily motion-blurred and easily blend into a white background, so the detector misses them.
 
-针对之前的问题，作了如下修改：
+The system was therefore re-designed around background subtraction and color/connectivity analysis (see *System Pipeline*). Further refinements:
 
-- 使用**多进程**检测取代**多线程**进行yolo检测，实测是降低了检测框追踪延迟 
-- 在碰撞判断中加入了某极值是否是全局前三小的判断，防止某些噪音影响判断
+- **v2.0**: impact detection by background subtraction on the target ROI.
+- **Frame-rate tuning**: above 100 FPS, many ball-like noise blobs are detected, so the frame rate is capped at about 40 FPS to balance responsiveness and stability.
+- **v2.3**: after an impact is detected, ball detection is suspended for 1.5 seconds. The target lights up on impact, which would otherwise corrupt the background-subtraction statistics.
 
-感觉已经接近最终版本了，看甲方那边什么情况
+## Project Structure
 
-###############################################################3
-#新版1.2 不使用yolo 深度学习网络来识别网球。
-原因:
-1. 网球特征太少，用深度学习没有意义
-2. yolo学习没有使用场景的图片，并做了网球标记,没有针对使用场景进行学习。
-3. 使用深度网络效率低。
-4. 快速运动网球图像是模糊的， 容易与白色背景融合，不能识别出来。
-对使用场景要求：
-1.网球要绿   2.背景布尽量不要使用白色。
+```
+├── main.py                 # Entry point and main loop
+├── target_manager.py       # Target board and scoring-zone localization
+├── tennis_ball_manager.py  # Ball detection and color modeling
+├── hit_manager.py          # Impact detection via background subtraction
+├── network.py              # Network communication
+├── tools.py                # Utility functions
+├── constants.py            # Constants
+├── meta/
+│   ├── config.json         # Configuration
+│   └── settings.json       # Runtime settings
+├── requirements.txt
+└── tennis_logo.png
+```
 
-#新版1.4 
-1.首先检测目标框
-2.检测目标框黑10目标框，得到黑10的背景颜色信息(hue, saturation. value)
-3.在黑10上做网球检测，通过背景删除，留下的为网球，通过联通性分析，得到可能 网球
-4. 分析网球颜色信息， 为在目标框检测网球提供信息
-5. 在目标框检测网球
-6. 分析网络路径计算撞击点， 
-7. 计算撞击点所在分值
+## Requirements
 
-
-项目文件列表:
-README.md
-constants.py
-main.py
-tools.py
-network.py
-target_manager.py
-tennis_ball_manager.py
-tennis_logo.png
-requirements.txt
-meta/config.json
-meta/settings.json
-hit_manager.py
-
-11
-
-第三方依赖包:
+```
 numpy
-Requests==2.32.3
+requests==2.32.3
 opencv-python==4.10.0.84
+```
 
-Press h --> relocateTarget --> find target -> targetroi
-                                          -> black score 10 roi -> need update background
+```bash
+pip install -r requirements.txt
+python main.py
+```
 
+## Usage
 
-        --> need update ball info 
+- Press **`h`** to relocate the target. This re-detects the target board and the 10-point zone, then updates the background and ball color models.
 
-version 2.0 
-hit_manager.py : use background substraction detect ball hit canvas
-roi -> resize -> count non zero :  not hit, not sure, hit happen, outlier
+## Scene Requirements
 
-frame rate > 100, detect many ball like object , noise,
-make a reasonable frame rate is important, now frame rate at 40
+- Use green tennis balls.
+- Avoid white backgrounds behind the target, which reduce contrast with blurred balls.
 
-version 2.3
-when hit target is detect, do not detect ball for 1.5 seconds, because light up
-this will effect  background subtraction statistics, so ignore it for 1.5 seconds
+## Known Limitations
 
+- Impact detection accuracy can be further improved.
+- Detection performance depends on lighting and background contrast.
